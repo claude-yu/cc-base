@@ -17,7 +17,7 @@ level = "info"
 [[commands]]
 name = "计划审查"
 description = "让 controller 生成计划并调用 Codex 审查，不执行"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-plan-review.ps1 {{args}}"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\invoke-controller-command.ps1 -CommandName 计划审查 -Real YOUR_PROJECT_ROOT\\controller\\bin\\submit-plan-review.ps1 {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
