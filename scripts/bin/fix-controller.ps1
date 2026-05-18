@@ -92,8 +92,6 @@ try {
 
     Write-ChatObservation -EventType "command_end" -CommandName "修复controller" -Detail "exit=$exitCode"
 
-    # Switch to GBK for cc-connect output
-    [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)
     Write-Output $result
     exit $exitCode
 } finally {

@@ -7,6 +7,10 @@
 
 $ErrorActionPreference = "Continue"
 
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 . (Join-Path (Split-Path -Parent $PSCommandPath) "_common.ps1")
 
 $ControllerRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)

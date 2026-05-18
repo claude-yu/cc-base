@@ -2,7 +2,9 @@
 
 . (Join-Path (Split-Path -Parent $PSCommandPath) "_common.ps1")
 
-[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $InstinctHome = if ($env:CC_INSTINCT_HOME) { $env:CC_INSTINCT_HOME } else { Join-Path $env:USERPROFILE ".cc-base\instincts" }
 $ProjectId = Get-ProjectId

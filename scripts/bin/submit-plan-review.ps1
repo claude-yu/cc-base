@@ -5,6 +5,10 @@
 
 $ErrorActionPreference = "Stop"
 
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
 . (Join-Path (Split-Path -Parent $PSCommandPath) "_common.ps1")
 
 $ControllerRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
@@ -39,8 +43,6 @@ Start-Process -FilePath "powershell" -ArgumentList @(
     "-RunId", $RunId, "-TaskFile", $TaskFile, "-ControllerRoot", $ControllerRoot
 ) -WorkingDirectory $ControllerRoot -WindowStyle Hidden
 
-# GBK must be set right before output — git calls in _common.ps1 can reset console codepage
-[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)
 Write-Output "已开始计划审查，预计需要 1-3 分钟。"
 Write-Output "完成后会自动发送结果。"
 Write-Output "也可手动查看: /查看审查 $RunId"

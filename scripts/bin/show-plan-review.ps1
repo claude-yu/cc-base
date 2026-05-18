@@ -6,8 +6,9 @@ $ErrorActionPreference = "Continue"
 
 . (Join-Path (Split-Path -Parent $PSCommandPath) "_common.ps1")
 
-# cc-connect uses GetACP()=936(GBK) to decode command stdout
-[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $ControllerRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $RunsRoot = Join-Path $ControllerRoot "runs"
