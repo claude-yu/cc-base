@@ -76,26 +76,26 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
 name = "问codex"
-description = "异步询问 Codex，完成后自动回传结果"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-codex-ask.ps1 {{args}}"
+description = "异步询问 Codex，完成后自动回传结果（Go binary）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe ask-codex {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
 name = "codex结果"
 description = "查看 Codex ask run 状态或结果"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-codex-ask.ps1 {{args}}"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe show {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
 name = "问cc"
-description = "异步询问 CC，完成后自动回传结果"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-cc-ask.ps1 {{args}}"
+description = "异步询问 CC，完成后自动回传结果（Go binary）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe ask-cc {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
 name = "cc结果"
 description = "查看 CC ask run 状态或结果"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-cc-ask.ps1 {{args}}"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe show {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]

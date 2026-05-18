@@ -9,19 +9,39 @@ cc-base is a **skill template repository** for mobile-controlled multi-agent wor
 ## Architecture
 
 ```
-mobile (WeChat/QQ/Feishu) → cc-connect → [[commands]] → PowerShell scripts
+mobile (WeChat/QQ/Feishu) → cc-connect → [[commands]] → controller pipeline
 ```
 
 Two async pipeline patterns:
 
 | Pattern | Entry | Runner | Status |
 |---------|-------|--------|--------|
-| Plan Review | `submit-plan-review.ps1` → `plan-review-runner.ps1` | `show-plan-review.ps1` |
-| Codex Ask | `submit-codex-ask.ps1` → `codex-ask-runner.ps1` | `show-codex-ask.ps1` |
+| Plan Review (PS) | `submit-plan-review.ps1` → `plan-review-runner.ps1` | `show-plan-review.ps1` |
+| CC Ask (Go) | `cc-controller.exe ask-cc` → `cc-controller.exe run-cc` | `cc-controller.exe show` |
+| Codex Ask (Go) | `cc-controller.exe ask-codex` → `cc-controller.exe run-codex` | `cc-controller.exe show` |
 
-Both: generate RunId → create `controller/runs/<RunId>/` → Start-Process runner → heartbeat via chat-log-writer → callback on completion.
+Both Go ask pipelines: generate RunId → create `controller/runs/<RunId>/` → exec.Command background runner → callback on completion.
 
-## Shared Library
+## Go Binary: cc-controller.exe
+
+Replaces PowerShell `submit-cc-ask.ps1` / `cc-ask-runner.ps1` and `submit-codex-ask.ps1` / `codex-ask-runner.ps1` hot paths.
+
+Source: `controller/cmd/cc-controller/main.go` (built with `go build -o cc-controller.exe ./cmd/cc-controller/`)
+
+Subcommands:
+- `ask-cc <text>` — generate RunId, write incoming question, detach `run-cc` background process, print RunId
+- `run-cc <RunId>` — call `claude -p` via os/exec, write results, send callback via `cc-connect send`
+- `ask-codex <text>` — same pattern for Codex CLI
+- `run-codex <RunId>` — call `codex exec`, clean output noise, write results, send callback
+- `show <RunId>` — display run results from filesystem
+
+Key advantages over PowerShell:
+- No BOM/encoding issues (Go writes UTF-8 natively)
+- `exec.Command` inherits parent env (no registry fallback needed)
+- Detached process via `HideWindow` SysProcAttr
+- Consistent error handling (proper exit codes)
+
+## Shared Library (PowerShell)
 
 `_common.ps1` — dot-source in every script:
 - `Resolve-ClaudeCmd` / `Resolve-CodexCmd` — locate CLI binaries
@@ -53,7 +73,6 @@ Supports `running` lifecycle and `heartbeat` record type.
 - Claude CLI → HTTP proxy (`$env:CLAUDE_PROXY`). SOCKS5h crashes it.
 - Codex CLI → SOCKS5h proxy (`$env:CODEX_PROXY`). HTTP may not work for WebSocket.
 - `Set-CodexProxy` only activates when `$env:CODEX_PROXY` is set.
-- For runner scripts launched via Start-Process: also check registry via `[Environment]::GetEnvironmentVariable("CODEX_PROXY", "User")`.
 
 ### Security
 - `--dangerously-skip-permissions` only in `execute-approved.ps1` and `execute-manual-approved.ps1`
@@ -63,7 +82,22 @@ Supports `running` lifecycle and `heartbeat` record type.
 
 ## Key Patterns
 
-### Async runner pattern
+### Go ask-cc pattern (replaces PowerShell async runner)
+```
+cc-controller ask-cc "<text>":
+  1. generate RunId, create run dir, write incoming-question.md
+  2. exec.Command("cc-controller", "run-cc", RunId) detached (HideWindow)
+  3. print RunId to stdout (cc-connect returns it to user)
+
+cc-controller run-cc <RunId> (background):
+  1. read incoming-question.md
+  2. exec.Command("claude", "-p", ...) with stdin = question
+  3. write cc-answer.md, summary.md
+  4. exec.Command("cc-connect", "send", "--stdin", "-p", "cc") with callback message
+  5. write runner.exitcode.txt
+```
+
+### PowerShell async runner pattern (plan review only)
 ```
 submit script:
   1. validate input
@@ -84,25 +118,33 @@ runner script:
 ### Invoke wrapper pattern (synchronous commands)
 `invoke-controller-command.ps1` wraps commands with chat-log in/out records. Not used for async pipelines (avoids dual RunId).
 
-### Start-Process caveats
+### Start-Process caveats (PowerShell only)
 - `-RedirectStandardOutput` passes pipe handle to child → blocks cc-connect. Use `-WindowStyle Hidden` instead.
 - `Start-Process` does NOT inherit parent process `$env:` changes. Set env vars persistently (`setx`) or add registry fallback in runner.
 
 ## Commands
 
-| Script | Command | Purpose |
-|--------|---------|---------|
-| `submit-plan-review.ps1` | `/计划审查 <task>` | CC plan + Codex review (async) |
-| `show-plan-review.ps1` | `/查看审查 [RunId]` | Plan review status/result |
-| `submit-codex-ask.ps1` | `/问codex <question>` | Async Codex Q&A |
-| `show-codex-ask.ps1` | `/codex结果 [RunId]` | Codex ask status/result |
-| `collect-md-status.ps1` | `/md状态检查 [path]` | Read-only MD workspace scan |
-| `fix-controller.ps1` | `/修复controller <desc>` | CC auto-fix infrastructure |
-| `grill-plan.ps1` | `/质询计划` | Q&A drill-down on latest review |
-| `auto-callback-toggle.ps1` | `/自动回传 开/关` | Toggle auto-callback |
+| Script/Binary | Command | Purpose |
+|---------------|---------|---------|
+| `cc-controller.exe` | `/问cc <question>` | Async CC Q&A (Go) |
+| `cc-controller.exe` | `/cc结果 [RunId]` | CC ask status/result (Go) |
+| `cc-controller.exe` | `/问codex <question>` | Async Codex Q&A (Go) |
+| `cc-controller.exe` | `/codex结果 [RunId]` | Codex ask status/result (Go) |
+| `submit-plan-review.ps1` | `/计划审查 <task>` | CC plan + Codex review (async, PS) |
+| `show-plan-review.ps1` | `/查看审查 [RunId]` | Plan review status/result (PS) |
+| `collect-md-status.ps1` | `/md状态检查 [path]` | Read-only MD workspace scan (PS) |
+| `fix-controller.ps1` | `/修复controller <desc>` | CC auto-fix infrastructure (PS) |
+| `grill-plan.ps1` | `/质询计划` | Q&A drill-down on latest review (PS) |
+| `auto-callback-toggle.ps1` | `/自动回传 开/关` | Toggle auto-callback (PS) |
 
 ## Deployment
 
-Scripts are edited in this repo, then copied to `E:\ai\selfwork_ytl\controller\bin\`. Real config edits go directly to `E:\ai\selfwork_ytl\cc-connect\config.toml` (never committed).
+Scripts are edited in this repo, then copied to `E:\ai\selfwork_ytl\controller\bin\`. Go source in `controller/cmd/cc-controller/`, built to `controller/cc-controller.exe`. Real config edits go directly to `E:\ai\selfwork_ytl\cc-connect\config.toml` (never committed).
+
+Build command:
+```powershell
+cd E:\ai\selfwork_ytl\controller
+C:\Go\bin\go.exe build -o cc-controller.exe .\cmd\cc-controller\
+```
 
 Commit convention: `feat:`, `fix:`, `refactor:`, `chore:` types. Two-commit pattern for feature + related infra changes.
