@@ -87,6 +87,18 @@ exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\c
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
+name = "问cc"
+description = "异步询问 CC，完成后自动回传结果"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-cc-ask.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "cc结果"
+description = "查看 CC ask run 状态或结果"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-cc-ask.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
 name = "自动回传"
 description = "开关计划审查完成后是否自动推回聊天窗口"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
@@ -251,6 +263,14 @@ command = "/codex结果"
 [[aliases]]
 name = "查看codex结果"
 command = "/codex结果"
+
+[[aliases]]
+name = "查看cc"
+command = "/cc结果"
+
+[[aliases]]
+name = "查看cc结果"
+command = "/cc结果"
 
 [[aliases]]
 name = "自动回传"

@@ -28,6 +28,12 @@ function Resolve-RequiredWorkDir {
         return $ParamValue
     }
     $envVal = [Environment]::GetEnvironmentVariable($EnvVarName)
+    if ([string]::IsNullOrWhiteSpace($envVal)) {
+        $envVal = [Environment]::GetEnvironmentVariable($EnvVarName, "User")
+    }
+    if ([string]::IsNullOrWhiteSpace($envVal)) {
+        $envVal = [Environment]::GetEnvironmentVariable($EnvVarName, "Machine")
+    }
     if (-not [string]::IsNullOrWhiteSpace($envVal)) {
         if (-not (Test-Path -LiteralPath $envVal)) {
             throw "WorkDir from $EnvVarName does not exist: $envVal"
@@ -35,6 +41,12 @@ function Resolve-RequiredWorkDir {
         return $envVal
     }
     $fallback = [Environment]::GetEnvironmentVariable("CC_WORK_DIR")
+    if ([string]::IsNullOrWhiteSpace($fallback)) {
+        $fallback = [Environment]::GetEnvironmentVariable("CC_WORK_DIR", "User")
+    }
+    if ([string]::IsNullOrWhiteSpace($fallback)) {
+        $fallback = [Environment]::GetEnvironmentVariable("CC_WORK_DIR", "Machine")
+    }
     if (-not [string]::IsNullOrWhiteSpace($fallback)) {
         if (-not (Test-Path -LiteralPath $fallback)) {
             throw "WorkDir from CC_WORK_DIR does not exist: $fallback"
@@ -53,8 +65,15 @@ function Set-CodexProxy {
 }
 
 function Get-ProjectId {
-    if ($env:CC_WORK_DIR) {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($env:CC_WORK_DIR.ToLower().TrimEnd('\','/'))
+    $workDir = $env:CC_WORK_DIR
+    if ([string]::IsNullOrWhiteSpace($workDir)) {
+        $workDir = [Environment]::GetEnvironmentVariable("CC_WORK_DIR", "User")
+    }
+    if ([string]::IsNullOrWhiteSpace($workDir)) {
+        $workDir = [Environment]::GetEnvironmentVariable("CC_WORK_DIR", "Machine")
+    }
+    if ($workDir) {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($workDir.ToLower().TrimEnd('\','/'))
         $sha = [System.Security.Cryptography.SHA256]::Create()
         $hash = $sha.ComputeHash($bytes)
         return ($hash | Select-Object -First 6 | ForEach-Object { $_.ToString("x2") }) -join ""
