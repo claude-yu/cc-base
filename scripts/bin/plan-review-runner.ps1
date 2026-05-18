@@ -29,8 +29,8 @@ function Send-Callback {
     param([string]$Message)
     if (Test-Path -LiteralPath $autoCallbackDisabled) { return }
     try {
-        $Message | Set-Content -Encoding UTF8 -LiteralPath $callbackMsg
-        Get-Content -LiteralPath $callbackMsg -Raw -Encoding UTF8 | cc-connect send --stdin -p cc 2>&1 | Out-Null
+        [System.IO.File]::WriteAllText($callbackMsg, $Message, [System.Text.UTF8Encoding]::new($false))
+        $Message | cc-connect send --stdin -p cc 2>&1 | Out-Null
     } catch {
         "cc-connect send failed: $_" | Add-Content -LiteralPath $logStderr -Encoding UTF8
     }

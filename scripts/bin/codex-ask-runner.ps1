@@ -39,8 +39,8 @@ function Send-Callback {
     param([string]$Message)
     if (Test-Path -LiteralPath $autoCallbackDisabled) { return }
     try {
-        $Message | Set-Content -Encoding UTF8 -LiteralPath $callbackMsg
-        Get-Content -LiteralPath $callbackMsg -Raw -Encoding UTF8 | cc-connect send --stdin -p cc 2>&1 | Out-Null
+        [System.IO.File]::WriteAllText($callbackMsg, $Message, [System.Text.UTF8Encoding]::new($false))
+        $Message | cc-connect send --stdin -p cc 2>&1 | Out-Null
     } catch {
         "cc-connect send failed: $_" | Add-Content -LiteralPath $logStderr -Encoding UTF8
     }
@@ -93,6 +93,14 @@ function Remove-ConsecutiveDuplicateAnswer {
 
     $normalized = $Text.Trim()
     if ([string]::IsNullOrWhiteSpace($normalized)) { return $normalized }
+
+    $blocks = @($normalized -split "(?:`r?`n){2,}" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if (($blocks.Count % 2) -eq 0 -and $blocks.Count -ge 2) {
+        $halfBlocks = [int]($blocks.Count / 2)
+        $firstBlocks = [string]::Join("`n`n", $blocks[0..($halfBlocks - 1)]).Trim()
+        $secondBlocks = [string]::Join("`n`n", $blocks[$halfBlocks..($blocks.Count - 1)]).Trim()
+        if ($firstBlocks -eq $secondBlocks) { return $firstBlocks }
+    }
 
     $lines = $normalized -split "`r?`n"
     if (($lines.Count % 2) -ne 0) { return $normalized }
