@@ -74,6 +74,18 @@ description = "分析 observations 并生成进化候选（不自动写 skill）
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\evolve-instincts.ps1"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+[[commands]]
+name = "问codex"
+description = "异步询问 Codex，完成后自动回传结果"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-codex-ask.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "codex结果"
+description = "查看 Codex ask run 状态或结果"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-codex-ask.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 # ═══════════════════════════════════════
 # Aliases
 # ═══════════════════════════════════════
@@ -168,11 +180,11 @@ command = "帮我问一下 cc"
 
 [[aliases]]
 name = "发给codex"
-command = "帮我问一下 codex"
+command = "/问codex"
 
 [[aliases]]
 name = "发给gpt"
-command = "帮我问一下 codex"
+command = "/问codex"
 
 [[aliases]]
 name = "发给opus"
@@ -192,15 +204,15 @@ command = "帮我问一下 cc"
 
 [[aliases]]
 name = "gpt"
-command = "帮我问一下 codex"
+command = "/问codex"
 
 [[aliases]]
 name = "问codex"
-command = "帮我问一下 codex"
+command = "/问codex"
 
 [[aliases]]
 name = "问gpt"
-command = "帮我问一下 codex"
+command = "/问codex"
 
 [[aliases]]
 name = "grill"
@@ -225,6 +237,14 @@ command = "/学习状态"
 [[aliases]]
 name = "进化"
 command = "/进化习惯"
+
+[[aliases]]
+name = "查看codex"
+command = "/codex结果"
+
+[[aliases]]
+name = "查看codex结果"
+command = "/codex结果"
 
 # ═══════════════════════════════════════
 # Claude Code project (WeChat)
