@@ -2,7 +2,8 @@
 
 新建 cc-connect 命令脚本时，逐项检查：
 
-- [ ] `[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)` （输出中文时）
+- [ ] stdout 输出中文时：param() 后加 UTF-8 三行块（见 rules/encoding.md），**禁用 `GetEncoding(936)`**
+- [ ] 脚本含中文（含注释）时：文件存为 UTF-8 **with BOM**，验证前 3 字节为 `EF BB BF`
 - [ ] `$ArgsRest` null-guard（接收 `{{args}}` 时）
 - [ ] `Write-Output` 在 `Start-Process` 之前（有后台启动时）
 - [ ] 不用 `-RedirectStandardOutput/-Error`（用 runner 脚本替代）
