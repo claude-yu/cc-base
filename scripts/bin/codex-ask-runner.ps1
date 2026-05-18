@@ -179,14 +179,10 @@ if ($codexExit -eq 0) {
         } catch {}
     }
 
-    $callbackBody = @"
-Codex 已回复。
-Run ID: $RunId
-
----
+    Send-Callback -Message @"
+[Codex] 已回复 (RunId: $RunId)
 $cleanAnswer
 "@
-    Send-Callback -Message $callbackBody
 } else {
     $errText = if ($answer) { $answer } else { "(no output)" }
     $errText | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "summary.md")
@@ -197,18 +193,7 @@ $cleanAnswer
         } catch {}
     }
 
-    $callbackBody = @"
-❌ Codex 调用失败
-
-RunId:
-$RunId
-
-建议：
-1. /codex结果 $RunId
-2. 检查 CODEX_PROXY / OPENAI_API_KEY
-3. /修复controller <错误>
-"@
-    Send-Callback -Message $callbackBody
+    Send-Callback -Message "[Codex] 调用失败 (RunId: $RunId). 检查 CODEX_PROXY / /修复controller"
 }
 
 "0" | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "runner.exitcode.txt")

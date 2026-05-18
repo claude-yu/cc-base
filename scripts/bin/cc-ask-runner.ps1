@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$RunId,
 
@@ -119,10 +119,7 @@ if ($ccExit -eq 0) {
     }
 
     Send-Callback -Message @"
-CC 已回复。
-Run ID: $RunId
-
----
+[CC] 已回复 (RunId: $RunId)
 $cleanAnswer
 "@
 } else {
@@ -133,15 +130,7 @@ $cleanAnswer
         try { & $chatLogWriter -Channel wechat -Direction out -Lifecycle failed -RecordType message -Command "问cc" -RunId $RunId -Text "exit=$ccExit" | Out-Null } catch {}
     }
 
-    Send-Callback -Message @"
-CC 调用失败
-Run ID: $RunId
-
-建议：
-1. /cc结果 $RunId
-2. 检查 Claude CLI / CLAUDE_PROXY
-3. /修复controller <错误>
-"@
+    Send-Callback -Message "[CC] 调用失败 (RunId: $RunId). 检查 Claude CLI / CLAUDE_PROXY / /修复controller"
 }
 
 "0" | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "runner.exitcode.txt")

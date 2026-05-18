@@ -50,48 +50,15 @@ function Get-CompletionCallbackMessage {
     param([string]$Summary)
     $verdict = Get-PlanReviewVerdict
     $nextAction = switch ($verdict) {
-        "APPROVE" {
-@"
-建议下一步（按优先级）：
-P1 需要执行就发送：/批准执行 $RunId
-P2 想先看细节就发送：/查看审查 $RunId
-P3 如果计划仍不放心，发送：/质询计划 $RunId
-"@
-        }
-        "REVISE" {
-@"
-建议下一步（按优先级）：
-P1 发送：/质询计划 $RunId，逐条补齐风险、输入、输出和确认点
-P2 修改任务描述后重新发送：/计划审查 <修改后的任务>
-P3 只有你明确接受剩余风险时，再考虑人工批准执行
-"@
-        }
-        "BLOCK" {
-@"
-建议下一步（按优先级）：
-P1 不要执行当前计划
-P2 发送：/查看审查 $RunId，先定位 BLOCK 原因
-P3 修正阻塞项后重新发送：/计划审查 <修正后的任务>
-"@
-        }
-        default {
-@"
-建议下一步（按优先级）：
-P1 发送：/查看审查 $RunId，先确认审查细节
-P2 根据结果决定是 /批准执行、/质询计划，还是重新 /计划审查
-P3 如果不确定，直接说“现在该做什么”，我会按当前 run 状态建议
-"@
-        }
+        "APPROVE" { "发送 /批准执行 $RunId 来执行计划" }
+        "REVISE" { "发送 /质询计划 $RunId 逐条补全，或修改后重新 /计划审查" }
+        "BLOCK" { "先 /查看审查 $RunId 查 BLOCK 原因，修正后重新 /计划审查" }
+        default { "发送 /查看审查 $RunId 确认细节" }
     }
 
     @"
-计划审查已完成。
-Run ID: $RunId
-Codex verdict: $verdict
-
+[计划审查] $verdict (RunId: $RunId)
 $nextAction
-
----
 
 $Summary
 "@
@@ -177,7 +144,7 @@ while (-not $process.HasExited) {
     if ($stageChanged -or (($now - $lastHeartbeat).TotalSeconds -ge 30)) {
         Write-PlanReviewHeartbeat -Stage $stage -Message "plan-review stage=$stage still running"
         if ($stageChanged -and $stage -ne "prepare") {
-            Send-Callback -Message "计划审查仍在进行：$(Get-PlanReviewStageText -Stage $stage)。`nRun ID: $RunId"
+            Send-Callback -Message "[计划审查] 进行中 - $(Get-PlanReviewStageText -Stage $stage) (RunId: $RunId)"
         }
         $lastStage = $stage
         $lastHeartbeat = $now
@@ -212,7 +179,7 @@ if ([string]::IsNullOrWhiteSpace($errDetail) -and (Test-Path -LiteralPath $logSt
 Write-ChatObservation -EventType "error" -CommandName "计划审查" -Detail "RunId=$RunId exit=$exitCode"
 
 if ($env:CC_AUTO_FIX_IN_PROGRESS -eq "1") {
-    Send-Callback -Message "计划审查失败 (exit=$exitCode)，自动修复也失败。请手动排查。`nRun ID: $RunId"
+    Send-Callback -Message "[计划审查] 失败 (RunId: $RunId). 自动修复也失败，请手动排查。"
     exit $exitCode
 }
 
@@ -233,14 +200,5 @@ $fixText | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "auto-fix-
 
 Write-ChatObservation -EventType "command_end" -CommandName "自动修复" -Detail "exit=$fixExit"
 
-$fixMsg = @"
-计划审查失败 (exit=$exitCode)，已自动尝试修复 (exit=$fixExit)。
-
-修复结果:
-$fixText
-
-请重新发送原命令，或用 /查看审查 $RunId 查看详情。
-"@
-
-Send-Callback -Message $fixMsg
+Send-Callback -Message "[计划审查] 自动修复完成 (exit=$fixExit). RunId: $RunId. /查看审查 查看详情。"
 exit $exitCode
