@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$RunId,
 
@@ -6,6 +6,10 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+
+[Console]::InputEncoding  = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 if ([string]::IsNullOrWhiteSpace($ControllerRoot)) {
     $ControllerRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
@@ -42,6 +46,46 @@ function Send-Callback {
     }
 }
 
+function ConvertTo-Text {
+    param($Value)
+    if ($null -eq $Value) { return "" }
+    if ($Value -is [array]) {
+        return (($Value | ForEach-Object { $_.ToString() }) -join "`n")
+    }
+    return $Value.ToString()
+}
+
+function Remove-CodexCliNoise {
+    param([string]$Text)
+
+    $lines = $Text -split "`r?`n"
+    $kept = New-Object System.Collections.Generic.List[string]
+    $skipMetadata = $false
+
+    foreach ($line in $lines) {
+        if ($line -match "^Reading prompt from stdin") { continue }
+        if ($line -match "^OpenAI Codex v") { $skipMetadata = $true; continue }
+        if ($line -match "^-{4,}$") { continue }
+        if ($line -match "^System\.Management\.Automation\.RemoteException$") { continue }
+        if ($line -match "^tokens used") { continue }
+        if ($line -match "^\s*\d{1,3}(,\d{3})+\s*$") { continue }
+        if ($line -match "^success:|^成功:") { continue }
+
+        if ($skipMetadata) {
+            if ($line -match "^codex\s*$") { $skipMetadata = $false; continue }
+            if ($line -match "^(workdir|model|provider|approval|sandbox|reasoning|session id):") { continue }
+            if ($line -match "^user\s*$") { continue }
+            continue
+        }
+
+        $kept.Add($line)
+    }
+
+    $clean = ([string]::Join("`n", $kept)).Trim()
+    if ([string]::IsNullOrWhiteSpace($clean)) { return $Text.Trim() }
+    return $clean
+}
+
 # ── Stage: prepare ──────────────────────────────────────────────
 Write-Heartbeat -Stage "prepare" -Message "Preparing codex ask"
 
@@ -73,30 +117,36 @@ $fullPrompt | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "questi
 Write-Heartbeat -Stage "codex_running" -Message "Codex is processing"
 
 $codexCmd = Resolve-CodexCmd
+if (-not $env:CODEX_PROXY) { $env:CODEX_PROXY = [Environment]::GetEnvironmentVariable("CODEX_PROXY", "User") }
+if (-not $env:CODEX_PROXY) { $env:CODEX_PROXY = [Environment]::GetEnvironmentVariable("CODEX_PROXY", "Machine") }
 Set-CodexProxy
 
 $answerPath = Join-Path $RunDir "codex-answer.md"
 
 try {
-    $answer = $fullPrompt | & $codexCmd exec --sandbox none --skip-git-repo-check --ephemeral 2>&1
+    $answer = $fullPrompt | & $codexCmd exec --sandbox read-only --skip-git-repo-check --ephemeral 2>&1
     $codexExit = $LASTEXITCODE
 } catch {
     $codexExit = 1
     $answer = "Error: $_"
 }
 
-$answer | Set-Content -Encoding UTF8 -LiteralPath $answerPath
+$answerText = ConvertTo-Text $answer
+$cleanAnswer = Remove-CodexCliNoise -Text $answerText
+
+$answerText | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "codex-answer.raw.md")
+$cleanAnswer | Set-Content -Encoding UTF8 -LiteralPath $answerPath
 "$codexExit" | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "codex-answer.exitcode.txt")
 
 # ── Stage: summarize + callback ─────────────────────────────────
 Write-Heartbeat -Stage "summarize" -Message "Summarizing codex answer"
 
 if ($codexExit -eq 0) {
-    $answer | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "summary.md")
+    $cleanAnswer | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "summary.md")
 
     if (Test-Path -LiteralPath $chatLogWriter) {
         try {
-            & $chatLogWriter -Channel wechat -Direction out -Lifecycle completed -RecordType message -Command "问codex" -RunId $RunId -Text $answer | Out-Null
+            & $chatLogWriter -Channel wechat -Direction out -Lifecycle completed -RecordType message -Command "问codex" -RunId $RunId -Text $cleanAnswer | Out-Null
         } catch {}
     }
 
@@ -105,7 +155,7 @@ Codex 已回复。
 Run ID: $RunId
 
 ---
-$answer
+$cleanAnswer
 "@
     Send-Callback -Message $callbackBody
 } else {
