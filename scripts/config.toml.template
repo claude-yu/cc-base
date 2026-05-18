@@ -35,7 +35,7 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 [[commands]]
 name = "md状态检查"
 description = "只读采集工作目录的文件清单和 log tail，不执行"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\collect-md-status.ps1"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\collect-md-status.ps1 \"{{args}}\""
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
@@ -84,6 +84,12 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 name = "codex结果"
 description = "查看 Codex ask run 状态或结果"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-codex-ask.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "自动回传"
+description = "开关计划审查完成后是否自动推回聊天窗口"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 # ═══════════════════════════════════════
@@ -245,6 +251,14 @@ command = "/codex结果"
 [[aliases]]
 name = "查看codex结果"
 command = "/codex结果"
+
+[[aliases]]
+name = "自动回传"
+command = "/自动回传"
+
+[[aliases]]
+name = "回传"
+command = "/自动回传"
 
 # ═══════════════════════════════════════
 # Claude Code project (WeChat)

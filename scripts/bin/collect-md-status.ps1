@@ -1,4 +1,5 @@
-﻿param(
+param(
+    [Parameter(Position = 0)]
     [string]$WorkDir = "",
     [string]$RunId = "",
     [int]$LogTail = 80
@@ -14,6 +15,10 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $ControllerRoot = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 
+if (-not [string]::IsNullOrWhiteSpace($WorkDir)) {
+    $WorkDir = $WorkDir.Trim().Trim('"')
+}
+
 if ([string]::IsNullOrWhiteSpace($WorkDir)) {
     $WorkDir = Resolve-RequiredWorkDir -ParamValue $WorkDir -EnvVarName "CC_WORK_DIR"
 }
@@ -24,7 +29,7 @@ if ([string]::IsNullOrWhiteSpace($RunId)) {
 $RunDir = Join-Path $ControllerRoot "runs\$RunId"
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
-Write-ChatObservation -EventType "command_start" -CommandName "md状态检查"
+Write-ChatObservation -EventType "command_start" -CommandName "md-status"
 
 function Write-Utf8File {
     param(
@@ -46,40 +51,6 @@ function Format-FileTable {
         Select-Object FullName, Length, LastWriteTime |
         Format-Table -AutoSize |
         Out-String -Width 240).TrimEnd()
-}
-
-function Resolve-CandidatePath {
-    param(
-        [string]$Label,
-        [string[]]$KnownPaths,
-        [string[]]$NamePatterns
-    )
-
-    foreach ($path in $KnownPaths) {
-        if (Test-Path -LiteralPath $path) {
-            return (Resolve-Path -LiteralPath $path).Path
-        }
-    }
-
-    $roots = @($WorkDir, (Join-Path $WorkDir "md_ternary"), (Join-Path $WorkDir "MD"), (Join-Path $WorkDir "md"))
-    foreach ($root in $roots) {
-        if (-not (Test-Path -LiteralPath $root)) { continue }
-
-        $dirs = Get-ChildItem -LiteralPath $root -Directory -Recurse -ErrorAction SilentlyContinue
-        foreach ($dir in $dirs) {
-            $name = $dir.FullName.ToLowerInvariant()
-            $matched = $true
-            foreach ($pattern in $NamePatterns) {
-                if (-not $name.Contains($pattern.ToLowerInvariant())) {
-                    $matched = $false
-                    break
-                }
-            }
-            if ($matched) { return $dir.FullName }
-        }
-    }
-
-    return ""
 }
 
 function Get-SharedTail {
@@ -135,109 +106,50 @@ if (-not (Test-Path -LiteralPath $WorkDir)) {
     exit 2
 }
 
-$candidates = @(
-    [PSCustomObject]@{
-        Label = "PEG5_Lena"
-        KnownPaths = @(
-            (Join-Path $WorkDir "PEG5_Lena"),
-            (Join-Path $WorkDir "md_ternary\peg5_lena")
-        )
-        Patterns = @("peg5", "lena")
-    },
-    [PSCustomObject]@{
-        Label = "3289_PEG3_Poma"
-        KnownPaths = @(
-            (Join-Path $WorkDir "3289_PEG3_Poma"),
-            (Join-Path $WorkDir "md_ternary\3289_peg3_poma")
-        )
-        Patterns = @("3289")
-    },
-    [PSCustomObject]@{
-        Label = "8011_PEG4_Lena"
-        KnownPaths = @(
-            (Join-Path $WorkDir "8011_PEG4_Lena"),
-            (Join-Path $WorkDir "md_ternary\8011_peg4_lena")
-        )
-        Patterns = @("8011")
-    }
-)
-
+$resolvedWorkDir = (Resolve-Path -LiteralPath $WorkDir).Path
 $extensions = @(".tpr", ".cpt", ".log", ".xtc", ".trr", ".edr", ".gro", ".pdb", ".top", ".itp", ".mdp")
-$summaryParts = New-Object System.Collections.Generic.List[string]
-$summaryParts.Add("# MD Status Collection")
-$summaryParts.Add("")
-$summaryParts.Add("Run ID: $RunId")
-$summaryParts.Add("WorkDir: $WorkDir")
-$summaryParts.Add("Log tail lines: $LogTail")
-$summaryParts.Add("")
-$summaryParts.Add("No MD command was executed. This script only lists files and reads log tails.")
 
-foreach ($candidate in $candidates) {
-    $label = $candidate.Label
-    $path = Resolve-CandidatePath -Label $label -KnownPaths $candidate.KnownPaths -NamePatterns $candidate.Patterns
-    $candidateReport = New-Object System.Collections.Generic.List[string]
-    $candidateReport.Add("# $label")
-    $candidateReport.Add("")
+$files = Get-ChildItem -LiteralPath $resolvedWorkDir -File -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $extensions -contains $_.Extension.ToLowerInvariant() }
+$logs = $files | Where-Object { $_.Extension -ieq ".log" } | Sort-Object FullName
 
-    if ([string]::IsNullOrWhiteSpace($path)) {
-        $candidateReport.Add("Status: directory not found")
-        $candidateReport.Add("Known paths checked:")
-        foreach ($knownPath in $candidate.KnownPaths) {
-            $candidateReport.Add("- $knownPath")
-        }
-        $content = [string]::Join([Environment]::NewLine, $candidateReport)
-        Write-Utf8File -Path (Join-Path $RunDir "$label.md") -Content $content
-        $summaryParts.Add("")
-        $summaryParts.Add("## $label")
-        $summaryParts.Add("")
-        $summaryParts.Add("Directory not found.")
-        continue
+$reportParts = New-Object System.Collections.Generic.List[string]
+$reportParts.Add("# MD Status")
+$reportParts.Add("")
+$reportParts.Add("Run ID: $RunId")
+$reportParts.Add("WorkDir: $resolvedWorkDir")
+$reportParts.Add("Log tail lines: $LogTail")
+$reportParts.Add("")
+$reportParts.Add("No MD command was executed. This script only lists files and reads log tails.")
+$reportParts.Add("")
+$reportParts.Add("## Matching Files")
+$reportParts.Add("")
+$reportParts.Add((Format-FileTable -Files $files))
+$reportParts.Add("")
+$reportParts.Add("## Log Tails")
+
+if ($null -eq $logs -or $logs.Count -eq 0) {
+    $reportParts.Add("")
+    $reportParts.Add("(no log files found)")
+} else {
+    foreach ($log in $logs) {
+        $reportParts.Add("")
+        $reportParts.Add("### $($log.FullName)")
+        $reportParts.Add("")
+        $reportParts.Add((Get-SharedTail -Path $log.FullName -Lines $LogTail))
     }
-
-    $candidateReport.Add("Directory: $path")
-    $candidateReport.Add("")
-    $candidateReport.Add("## Matching Files")
-    $candidateReport.Add("")
-
-    $files = Get-ChildItem -LiteralPath $path -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $extensions -contains $_.Extension.ToLowerInvariant() }
-    $candidateReport.Add((Format-FileTable -Files $files))
-
-    $logs = $files | Where-Object { $_.Extension -ieq ".log" } | Sort-Object FullName
-    $candidateReport.Add("")
-    $candidateReport.Add("## Log Tails")
-    if ($null -eq $logs -or $logs.Count -eq 0) {
-        $candidateReport.Add("")
-        $candidateReport.Add("(no log files found)")
-    } else {
-        foreach ($log in $logs) {
-            $candidateReport.Add("")
-            $candidateReport.Add("### $($log.FullName)")
-            $candidateReport.Add("")
-            $candidateReport.Add((Get-SharedTail -Path $log.FullName -Lines $LogTail))
-        }
-    }
-
-    $content = [string]::Join([Environment]::NewLine, $candidateReport)
-    Write-Utf8File -Path (Join-Path $RunDir "$label.md") -Content $content
-
-    $summaryParts.Add("")
-    $summaryParts.Add("## $label")
-    $summaryParts.Add("")
-    $summaryParts.Add("Directory: $path")
-    $summaryParts.Add("Matching files: " + (($files | Measure-Object).Count))
-    $summaryParts.Add("Log files: " + (($logs | Measure-Object).Count))
 }
 
-$summaryParts.Add("")
-$summaryParts.Add("Run directory:")
-$summaryParts.Add("")
-$summaryParts.Add($RunDir)
+$reportParts.Add("")
+$reportParts.Add("Run directory:")
+$reportParts.Add("")
+$reportParts.Add($RunDir)
 
-$summary = [string]::Join([Environment]::NewLine, $summaryParts)
+$summary = [string]::Join([Environment]::NewLine, $reportParts)
 Write-Utf8File -Path (Join-Path $RunDir "summary.md") -Content $summary
+Write-Utf8File -Path (Join-Path $RunDir "md-status.md") -Content $summary
 
-Write-ChatObservation -EventType "command_end" -CommandName "md状态检查"
+Write-ChatObservation -EventType "command_end" -CommandName "md-status"
 
 Write-Output $summary
 exit 0
