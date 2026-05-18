@@ -75,7 +75,7 @@ function Get-ObservationDir {
     $instinctHome = if ($env:CC_INSTINCT_HOME) { $env:CC_INSTINCT_HOME } else { Join-Path $env:USERPROFILE ".cc-base\instincts" }
     $projectId = Get-ProjectId
     $projectDir = Join-Path $instinctHome "projects\$projectId"
-    New-Item -ItemType Directory -Force -Path $projectDir -ErrorAction SilentlyContinue | Out-Null
+    New-Item -ItemType Directory -Force -Path $projectDir -ErrorAction Stop | Out-Null
     return $projectDir
 }
 
@@ -95,7 +95,7 @@ function Write-ChatObservation {
             detail    = $Detail
             platform  = if ($env:CC_CHAT_PLATFORM) { $env:CC_CHAT_PLATFORM } else { "unknown" }
         } | ConvertTo-Json -Compress
-        $obs | Add-Content -LiteralPath $obsFile -Encoding UTF8
+        $obs | Add-Content -LiteralPath $obsFile -Encoding UTF8 -ErrorAction Stop
     } catch {
         # observation 记录失败不影响主流程
     }

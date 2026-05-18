@@ -2,13 +2,13 @@
 param(
   [Parameter(Mandatory=$true)][ValidateSet('wechat','feishu')][string]$Channel,
   [Parameter(Mandatory=$true)][ValidateSet('in','out')][string]$Direction,
-  [Parameter(Mandatory=$true)][ValidateSet('started','completed','failed','replied','cancelled')][string]$Lifecycle,
+  [Parameter(Mandatory=$true)][ValidateSet('started','running','completed','failed','replied','cancelled')][string]$Lifecycle,
   [string]$Command,
   [string]$Alias,
   [string]$RunId,
   [string]$Text,
   [ValidateSet('corrected','confirmed','ignored')][string]$Signal,
-  [ValidateSet('message','signal_patch')][string]$RecordType = 'message',
+  [ValidateSet('message','signal_patch','heartbeat')][string]$RecordType = 'message',
   [hashtable]$Meta
 )
 

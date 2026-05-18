@@ -36,9 +36,31 @@ $ccExitPath = Join-Path $RunDir "cc-plan.exitcode.txt"
 $reviewExitPath = Join-Path $RunDir "codex-review.exitcode.txt"
 $reviewPath = Join-Path $RunDir "codex-review.md"
 
+function Get-RunningStage {
+    if (Test-Path -LiteralPath (Join-Path $RunDir "summary.md")) { return "summarize" }
+    if (Test-Path -LiteralPath (Join-Path $RunDir "codex-review-prompt.md")) { return "codex_review" }
+    if (Test-Path -LiteralPath (Join-Path $RunDir "cc-plan-prompt.md")) { return "cc_plan" }
+    if (Test-Path -LiteralPath (Join-Path $RunDir "request.md")) { return "cc_plan" }
+    return "prepare"
+}
+
+function Get-StageText {
+    param([string]$Stage)
+    switch ($Stage) {
+        "prepare" { return "准备计划审查任务" }
+        "cc_plan" { return "Claude Code 正在生成计划" }
+        "codex_review" { return "Codex 正在审查计划" }
+        "summarize" { return "正在汇总审查结果" }
+        default { return $Stage }
+    }
+}
+
 if (-not (Test-Path -LiteralPath $summaryPath)) {
+    $stage = Get-RunningStage
     Write-Output "Run ID: $RunId"
     Write-Output "Status: RUNNING"
+    Write-Output "Stage: $stage"
+    Write-Output "Now: $(Get-StageText -Stage $stage)"
     $files = Get-ChildItem -LiteralPath $RunDir | Select-Object -ExpandProperty Name
     Write-Output ("Files: " + ($files -join ", "))
     Write-Output "Check later with: /review-status $RunId"
