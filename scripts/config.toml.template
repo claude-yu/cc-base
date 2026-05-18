@@ -1,0 +1,286 @@
+# cc-connect config.toml template
+# Copy this file and fill in your platform credentials.
+# Source location: <project>/cc-connect/config.toml
+# Deploy location: ~/.cc-connect/config.toml (auto-synced by start.ps1)
+
+language = "zh"
+
+[log]
+level = "info"
+
+# ═══════════════════════════════════════
+# Controller pipeline commands
+# ═══════════════════════════════════════
+# Paths below assume: <project>/controller/bin/*.ps1
+# Replace YOUR_PROJECT_ROOT with your actual project root.
+
+[[commands]]
+name = "计划审查"
+description = "让 controller 生成计划并调用 Codex 审查，不执行"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\submit-plan-review.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "review-status"
+description = "Show async plan-review run status or result"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-plan-review.ps1 -RunId \"{{args}}\""
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "latest-review"
+description = "Show latest plan-review run"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-plan-review.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "md状态检查"
+description = "只读采集工作目录的文件清单和 log tail，不执行"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\collect-md-status.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "修复controller"
+description = "CC 直接修复 controller/cc-connect 基础设施报错，不走 Codex 审查"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\fix-controller.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "批准执行"
+description = "执行已通过 Codex APPROVE 的 controller run"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\execute-approved.ps1 -RunId \"{{args}}\""
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "人工批准执行"
+description = "执行用户人工接受的 controller run（需 manual-approval.md）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\execute-manual-approved.ps1 -RunId \"{{args}}\""
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "质询计划"
+description = "Grill-Me 模式逐条质询最近的计划审查结果"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\grill-plan.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "学习状态"
+description = "查看 chat-instinct 学习统计（observations + instincts）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\instinct-status.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "进化习惯"
+description = "分析 observations 并生成进化候选（不自动写 skill）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\evolve-instincts.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+# ═══════════════════════════════════════
+# Aliases
+# ═══════════════════════════════════════
+
+[[aliases]]
+name = "审查计划"
+command = "/计划审查"
+
+[[aliases]]
+name = "让cc写计划"
+command = "/计划审查"
+
+[[aliases]]
+name = "修controller"
+command = "/修复controller"
+
+[[aliases]]
+name = "fixcontroller"
+command = "/修复controller"
+
+[[aliases]]
+name = "修复bug"
+command = "/修复controller"
+
+[[aliases]]
+name = "修复"
+command = "/修复controller"
+
+[[aliases]]
+name = "fix"
+command = "/修复controller"
+
+[[aliases]]
+name = "检查MD"
+command = "/md状态检查"
+
+[[aliases]]
+name = "md进度"
+command = "/md状态检查"
+
+[[aliases]]
+name = "MD进度"
+command = "/md状态检查"
+
+[[aliases]]
+name = "md检查"
+command = "/md状态检查"
+
+[[aliases]]
+name = "MD检查"
+command = "/md状态检查"
+
+[[aliases]]
+name = "查md"
+command = "/md状态检查"
+
+[[aliases]]
+name = "查MD"
+command = "/md状态检查"
+
+[[aliases]]
+name = "md跑到哪了"
+command = "/md状态检查"
+
+[[aliases]]
+name = "模拟进度"
+command = "/md状态检查"
+
+[[aliases]]
+name = "批准执行"
+command = "/批准执行"
+
+[[aliases]]
+name = "执行批准任务"
+command = "/批准执行"
+
+[[aliases]]
+name = "人工批准执行"
+command = "/人工批准执行"
+
+[[aliases]]
+name = "手动批准执行"
+command = "/人工批准执行"
+
+[[aliases]]
+name = "发给cc"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "发给claude"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "发给codex"
+command = "帮我问一下 codex"
+
+[[aliases]]
+name = "发给gpt"
+command = "帮我问一下 codex"
+
+[[aliases]]
+name = "发给opus"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "opus"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "问cc"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "问claude"
+command = "帮我问一下 cc"
+
+[[aliases]]
+name = "gpt"
+command = "帮我问一下 codex"
+
+[[aliases]]
+name = "问codex"
+command = "帮我问一下 codex"
+
+[[aliases]]
+name = "问gpt"
+command = "帮我问一下 codex"
+
+[[aliases]]
+name = "grill"
+command = "/质询计划"
+
+[[aliases]]
+name = "grillme"
+command = "/质询计划"
+
+[[aliases]]
+name = "拷问计划"
+command = "/质询计划"
+
+[[aliases]]
+name = "计划质询"
+command = "/质询计划"
+
+[[aliases]]
+name = "学习状态"
+command = "/学习状态"
+
+[[aliases]]
+name = "进化"
+command = "/进化习惯"
+
+# ═══════════════════════════════════════
+# Claude Code project (WeChat)
+# ═══════════════════════════════════════
+
+[[projects]]
+admin_from = "YOUR_ADMIN_ID"
+name = "cc"
+reset_on_idle_mins = 0
+
+[projects.agent]
+type = "claudecode"
+
+[projects.agent.options]
+work_dir = "YOUR_WORK_DIR"
+mode = "default"
+system_prompt = """你是通过微信接入的 Claude Code 执行者（代号 cc）。用户从手机远程下达指令，你负责在当前工作区执行。
+收到指令后：先说要做什么 → 执行 → 给出简短结果。
+被问到"你是谁/你能做什么"时：介绍自己的角色，说明当前工作区路径和目录结构，列出正在进行的项目阶段。
+涉及破坏性操作（删除/覆盖/重置）必须先确认。"""
+
+[[projects.platforms]]
+type = "weixin"
+
+[projects.platforms.options]
+allow_from = "YOUR_WECHAT_OPENID"
+admin_from = "YOUR_WECHAT_OPENID"
+token = "YOUR_WECHAT_TOKEN"
+base_url = "https://YOUR_CORP_SUBDOMAIN.weixin.qq.com"
+account_id = "YOUR_WECHAT_ACCOUNT_ID"
+
+# ═══════════════════════════════════════
+# Codex project (WeChat + QQ)
+# ═══════════════════════════════════════
+
+[[projects]]
+admin_from = "YOUR_ADMIN_ID"
+name = "codex"
+reset_on_idle_mins = 0
+
+[projects.agent]
+type = "codex"
+
+[projects.agent.options]
+work_dir = "YOUR_CODEX_WORK_DIR"
+mode = "suggest"
+
+[[projects.agent.providers]]
+name = "openai"
+api_key = "${OPENAI_API_KEY}"
+
+# Optional: QQ platform via NapCat
+# [[projects.platforms]]
+# type = "qq"
+# [projects.platforms.options]
+# ws_url = "ws://127.0.0.1:3001"
+# token = "YOUR_QQ_TOKEN"
+# allow_from = "YOUR_QQ_ID"
+# admin_from = "YOUR_QQ_ID"

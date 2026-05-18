@@ -1,0 +1,17 @@
+config.toml
+!scripts/config.toml.template
+runs/
+*.log
+*.exitcode.txt
+
+# v2.3 research-memory bridge
+memory/chat/*
+!memory/chat/.gitkeep
+memory/archive/
+
+# Backup configs (防 config.toml.bak-* 类含真实 token)
+*.bak-*
+*.bak
+
+# Local sandbox / temp
+test/
