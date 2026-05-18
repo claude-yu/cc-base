@@ -83,7 +83,28 @@ function Remove-CodexCliNoise {
 
     $clean = ([string]::Join("`n", $kept)).Trim()
     if ([string]::IsNullOrWhiteSpace($clean)) { return $Text.Trim() }
+    $deduped = Remove-ConsecutiveDuplicateAnswer -Text $clean
+    if (-not [string]::IsNullOrWhiteSpace($deduped)) { return $deduped }
     return $clean
+}
+
+function Remove-ConsecutiveDuplicateAnswer {
+    param([string]$Text)
+
+    $normalized = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($normalized)) { return $normalized }
+
+    $lines = $normalized -split "`r?`n"
+    if (($lines.Count % 2) -ne 0) { return $normalized }
+
+    $half = [int]($lines.Count / 2)
+    if ($half -lt 2) { return $normalized }
+
+    $first = [string]::Join("`n", $lines[0..($half - 1)]).Trim()
+    $second = [string]::Join("`n", $lines[$half..($lines.Count - 1)]).Trim()
+
+    if ($first -eq $second) { return $first }
+    return $normalized
 }
 
 # ── Stage: prepare ──────────────────────────────────────────────
