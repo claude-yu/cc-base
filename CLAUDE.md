@@ -118,6 +118,17 @@ runner script:
 ### Invoke wrapper pattern (synchronous commands)
 `invoke-controller-command.ps1` wraps commands with chat-log in/out records. Not used for async pipelines (avoids dual RunId).
 
+### Task cancellation pattern
+```
+Runner startup: write PID to runs/<RunId>/runner.pid
+cancel command: read PID file → taskkill /F /T /PID <pid>
+  → kills entire process tree (runner + child claude/codex)
+  → writes summary.md + sends callback "[Cancelled]"
+
+cancel <RunId> — cancel specific task
+cancel (no args) — find latest running task by runner.pid + tasklist check
+```
+
 ### Start-Process caveats (PowerShell only)
 - `-RedirectStandardOutput` passes pipe handle to child → blocks cc-connect. Use `-WindowStyle Hidden` instead.
 - `Start-Process` does NOT inherit parent process `$env:` changes. Set env vars persistently (`setx`) or add registry fallback in runner.
@@ -130,6 +141,7 @@ runner script:
 | `cc-controller.exe` | `/cc结果 [RunId]` | CC ask status/result (Go) |
 | `cc-controller.exe` | `/问codex <question>` | Async Codex Q&A (Go) |
 | `cc-controller.exe` | `/codex结果 [RunId]` | Codex ask status/result (Go) |
+| `cc-controller.exe` | `/取消任务 [RunId]` | Cancel running task by RunId (omit = cancel latest) (Go) |
 | `submit-plan-review.ps1` | `/计划审查 <task>` | CC plan + Codex review (async, PS) |
 | `show-plan-review.ps1` | `/查看审查 [RunId]` | Plan review status/result (PS) |
 | `collect-md-status.ps1` | `/md状态检查 [path]` | Read-only MD workspace scan (PS) |
