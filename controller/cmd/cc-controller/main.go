@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -39,6 +41,12 @@ func main() {
 	case "show":
 		mustHaveArgs(args, 1, "usage: cc-controller show <RunId>")
 		showRun(root, args[0])
+	case "cancel":
+		if len(args) >= 1 && args[0] != "" {
+			cancelTask(root, args[0])
+		} else {
+			cancelLatest(root)
+		}
 	default:
 		usage()
 	}
@@ -52,7 +60,9 @@ Commands:
   ask-codex <text>    Ask Codex asynchronously
   run-cc <RunId>      Background runner for ask-cc
   run-codex <RunId>   Background runner for ask-codex
-  show <RunId>        Show run result`)
+  show <RunId>        Show run result
+  cancel [RunId]      Cancel a running task (omit RunId to cancel latest)`)
+		os.Exit(1)
 	os.Exit(1)
 }
 
@@ -124,7 +134,12 @@ func cmdAsk(root, suffix, runnerName string, args []string) {
 	runner.Stdout = nil
 	runner.Stderr = nil
 	runner.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	runner.Start()
+	if err := runner.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to start runner: %s\n", err)
+		os.Exit(1)
+	}
+	// Write PID for cancellation tracking
+	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", runner.Process.Pid))
 
 	fmt.Println(runID)
 }
@@ -161,6 +176,7 @@ func resolveWorkDir() string {
 
 func runCC(root, runID string) {
 	runDir := filepath.Join(root, "runs", runID)
+	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", os.Getpid()))
 
 	question, err := os.ReadFile(filepath.Join(runDir, "incoming-question.md"))
 	if err != nil {
@@ -347,6 +363,7 @@ func removeDuplicateOutput(text string) string {
 
 func runCodex(root, runID string) {
 	runDir := filepath.Join(root, "runs", runID)
+	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", os.Getpid()))
 
 	question, err := os.ReadFile(filepath.Join(runDir, "incoming-question.md"))
 	if err != nil {
@@ -411,6 +428,84 @@ If no action is needed, write:
 	}
 
 	os.WriteFile(filepath.Join(runDir, "runner.exitcode.txt"), []byte("0"), 0644)
+}
+
+// ── cancel ──
+
+func cancelTask(root, runID string) {
+	runDir := filepath.Join(root, "runs", runID)
+	pidPath := filepath.Join(runDir, "runner.pid")
+
+	pidData, err := os.ReadFile(pidPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "找不到运行中任务的 PID (RunId: %s)\n", runID)
+		os.Exit(1)
+	}
+
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "无效 PID 文件: %s\n", pidPath)
+		os.Exit(1)
+	}
+
+	kill := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid))
+	kill.Stdout = nil
+	kill.Stderr = nil
+	if err := kill.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "取消失败 (RunId: %s, PID %d 可能已退出)\n", runID, pid)
+		os.Exit(1)
+	}
+
+	msg := fmt.Sprintf("[Cancelled] 任务已取消 (RunId: %s)", runID)
+	os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(msg), 0644)
+	os.WriteFile(filepath.Join(runDir, "runner.exitcode.txt"), []byte("-1"), 0644)
+	sendCallback(runDir, fmt.Sprintf("[Cancelled] (RunId: %s)\n任务已被用户取消。\n/查看审查 %s 可查看最终状态。", runID, runID))
+
+	fmt.Printf("已取消: %s (PID %d)\n", runID, pid)
+}
+
+func cancelLatest(root string) {
+	entries, err := os.ReadDir(filepath.Join(root, "runs"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "没有运行中的任务")
+		os.Exit(1)
+	}
+
+	var running []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		pidPath := filepath.Join(root, "runs", e.Name(), "runner.pid")
+		pidData, err := os.ReadFile(pidPath)
+		if err != nil {
+			continue
+		}
+		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
+		if err != nil {
+			continue
+		}
+		if isProcessRunning(pid) {
+			running = append(running, e.Name())
+		}
+	}
+
+	if len(running) == 0 {
+		fmt.Fprintln(os.Stderr, "没有运行中的任务")
+		os.Exit(1)
+	}
+
+	sort.Slice(running, func(i, j int) bool { return running[i] > running[j] })
+	cancelTask(root, running[0])
+}
+
+func isProcessRunning(pid int) bool {
+	check := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH")
+	out, err := check.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), strconv.Itoa(pid))
 }
 
 // ── shared helpers ──

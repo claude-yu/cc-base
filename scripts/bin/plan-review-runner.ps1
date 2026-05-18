@@ -18,6 +18,7 @@ if ([string]::IsNullOrWhiteSpace($ControllerRoot)) {
 
 $RunDir = Join-Path $ControllerRoot "runs\$RunId"
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
+$PID | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $RunDir "runner.pid") -NoNewline
 $logStdout = Join-Path $RunDir "background.log"
 $logStderr = Join-Path $RunDir "background-err.log"
 $callbackMsg = Join-Path $RunDir "callback-msg.md"

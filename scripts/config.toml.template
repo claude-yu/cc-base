@@ -104,6 +104,12 @@ description = "开关计划审查完成后是否自动推回聊天窗口"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+[[commands]]
+name = "取消任务"
+description = "取消正在运行的任务（/取消任务 <RunId>，不传 RunId 自动取消最近任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 # ═══════════════════════════════════════
 # Aliases
 # ═══════════════════════════════════════
@@ -279,6 +285,25 @@ command = "/自动回传"
 [[aliases]]
 name = "回传"
 command = "/自动回传"
+
+[[aliases]]
+name = "取消"
+command = "/取消任务"
+[[aliases]]
+name = "中止"
+command = "/取消任务"
+[[aliases]]
+name = "停止"
+command = "/取消任务"
+[[aliases]]
+name = "abort"
+command = "/取消任务"
+[[aliases]]
+name = "cancel"
+command = "/取消任务"
+[[aliases]]
+name = "stop"
+command = "/取消任务"
 
 # ═══════════════════════════════════════
 # Claude Code project (WeChat)
