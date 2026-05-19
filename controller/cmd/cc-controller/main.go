@@ -68,7 +68,7 @@ func main() {
 	case "ask-codex":
 		cmdAsk(root, "codex-ask", "run-codex", args)
 	case "exec-cc":
-		mustHaveArgs(args, 1, "usage: cc-controller exec-cc --text <msg> [--session <id>] [--auto]")
+		mustHaveArgs(args, 1, "usage: cc-controller exec-cc --text <msg> [--session <id>] [--auto] [--reply-project <name>]")
 		cmdExecCC(root, args)
 	case "run-cc":
 		mustHaveArgs(args, 1, "usage: cc-controller run-cc <RunId> [--session <SessionId>] [--mode <mode>]")
@@ -121,8 +121,20 @@ func main() {
 		}
 	case "project":
 		cmdProject(root)
+	case "monitor":
+		cmdMonitor(root)
 	case "status":
-		cmdStatus(root)
+		full := false
+		for _, a := range args {
+			if a == "--full" || a == "--detail" {
+				full = true
+			}
+		}
+		if full {
+			cmdStatus(root)
+		} else {
+			cmdStatusShort(root)
+		}
 	case "switch":
 		mustHaveArgs(args, 1, "usage: cc-controller switch <project-name|path>")
 		cmdSwitchProject(root, args[0])
@@ -136,10 +148,13 @@ func usage() {
 
 Commands:
   ask-cc <text>           Ask Claude Code asynchronously
+           [--reply-project <name>]  Override callback project (default: cc)
   ask-codex <text>        Ask Codex asynchronously
+           [--reply-project <name>]  Override callback project (default: cc)
   exec-cc --text <msg>    Session-aware CC execution (with heartbeat/callback)
            [--session <id>]
            [--auto]       Auto-classify mode (advice/readonly/execute_request)
+           [--reply-project <name>]  Override callback project (default: cc)
   run-cc <RunId>          Background runner for ask-cc
            [--session <SessionId>]
            [--mode <mode>]  Mode: advice (default), readonly, execute
@@ -148,6 +163,9 @@ Commands:
   show [RunId|kind]       Show run result
   cancel [RunId]          Cancel a running task (omit RunId to cancel latest)
   project                 Show active project info
+  monitor                 Scan running tasks for stuck/zombie state
+  status                  Show condensed status (default, mobile-friendly)
+  status --full           Show full verbose status dashboard
   switch <name|path>      Switch to another project`)
 	os.Exit(1)
 }

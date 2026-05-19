@@ -96,7 +96,7 @@ func runCC(root, runID, sessionID, mode string) {
 					Stage:      mode + "_running",
 					ElapsedSec: elapsed,
 				})
-				sendCallback(runDir, fmt.Sprintf("⏳ CC 处理中\nRun ID: %s\n工作目录: %s\n已用时: %ds", runID, workDir, elapsed))
+				sendCallback(runDir, heartbeatMsg("CC", runID, elapsed, "工作目录: "+workDir))
 			case <-done:
 				return
 			}

@@ -173,7 +173,7 @@ If no action is needed, write:
 					Stage:      "api_codex_running",
 					ElapsedSec: elapsed,
 				})
-				sendCallback(runDir, fmt.Sprintf("⏳ Codex (%s) 处理中\nRun ID: %s\n已用时: %ds", backend, runID, elapsed))
+				sendCallback(runDir, heartbeatMsg(fmt.Sprintf("Codex(%s)", backend), runID, elapsed, ""))
 			case <-done:
 				return
 			}

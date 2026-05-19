@@ -70,6 +70,7 @@ func sendCallback(runDir, message string) {
 			}
 		}
 		if ccConnect == "" {
+			logCallbackError(runDir, "cc-connect not found on PATH or in known locations")
 			return
 		}
 	}
@@ -84,7 +85,48 @@ func sendCallback(runDir, message string) {
 
 	cmd := exec.Command(ccConnect, "send", "--stdin", "-p", project)
 	cmd.Stdin = strings.NewReader(message)
-	cmd.Run()
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		errMsg := fmt.Sprintf("cc-connect send failed (project=%s): %v", project, err)
+		if s := stderr.String(); s != "" {
+			errMsg += " stderr: " + strings.TrimSpace(s)
+		}
+		logCallbackError(runDir, errMsg)
+	}
+}
+
+func logCallbackError(runDir, errMsg string) {
+	logPath := filepath.Join(runDir, "callback-error.log")
+	entry := fmt.Sprintf("[%s] %s\n", time.Now().UTC().Format(time.RFC3339), errMsg)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(entry)
+}
+
+// heartbeatMsg builds a heartbeat callback message with escalation at 3/5/10 min.
+func heartbeatMsg(label, runID string, elapsed int, extra string) string {
+	var prefix, suffix string
+	switch {
+	case elapsed >= 600:
+		prefix = "⚠️"
+		suffix = fmt.Sprintf("\n运行已超 %d 分钟，可能卡住\n/取消任务 %s", elapsed/60, runID)
+	case elapsed >= 300:
+		prefix = "⏳"
+		suffix = fmt.Sprintf("\n运行较久（%d分钟），如需取消: /取消任务 %s", elapsed/60, runID)
+	default:
+		prefix = "⏳"
+	}
+	msg := fmt.Sprintf("%s %s 处理中\nRun ID: %s", prefix, label, runID)
+	if extra != "" {
+		msg += "\n" + extra
+	}
+	msg += fmt.Sprintf("\n已用时: %ds", elapsed)
+	msg += suffix
+	return msg
 }
 
 func writeError(runDir string, err error) {

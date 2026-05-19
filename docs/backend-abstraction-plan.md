@@ -153,6 +153,7 @@ Preset B: QQ + native Claude + native Codex
 Preset C: WeChat + native Claude + DeepSeek as Codex role
 Preset D: QQ + native Claude + DeepSeek as Codex role
 Preset E: WeChat/QQ + API-only role backends (future)
+Preset F: Feishu output callback + native/API role backends (future)
 ```
 
 ## Environment Variable Model
@@ -187,6 +188,130 @@ CC_CODEX_MODEL=...
 ```
 
 第一轮只要求 `CC_CC_BACKEND=native_claude` 真正可执行。其它 CC role API backend 只允许配置，并在运行时明确提示未实现。
+
+## Feishu Integration Plan
+
+飞书集成分两阶段做。不要在第一轮把飞书当成完整 cc-connect 替代品。
+
+可复用项目：
+
+```text
+https://github.com/riba2534/feishu-cli.git
+```
+
+定位：
+
+- `feishu-cli` 是飞书开放平台 CLI。
+- 它擅长飞书文档、知识库、表格、消息、日历、任务等 API 操作。
+- 它可以帮助 cc-base 少写大量飞书 API 封装。
+- 它不是直接替代 cc-connect 的实时聊天桥接。
+
+### Phase 1: Feishu Output Provider
+
+第一阶段只做输出能力，不做实时接收飞书消息。
+
+目标：
+
+```text
+cc-controller run 完成
+  -> callback provider = feishu
+  -> 发送结果到飞书 P2P/群
+  -> 可选：把 plan/review/summary 导入飞书文档或知识库
+```
+
+新增配置：
+
+```text
+CC_CALLBACK_PROVIDER=feishu
+CC_FEISHU_CLI=feishu-cli
+CC_FEISHU_CHAT_ID=...
+CC_FEISHU_DOC_FOLDER=...
+```
+
+建议新增：
+
+```text
+internal/callback/feishu.go
+```
+
+职责：
+
+- 调用 `feishu-cli` 发送文本消息。
+- 后续可调用 `feishu-cli` 导入 Markdown 到飞书文档。
+- callback 失败时写入 run 目录的 `callback-error.md`。
+
+第一阶段不做：
+
+- 不做飞书 webhook receiver。
+- 不处理飞书事件订阅。
+- 不实现消息去重。
+- 不把飞书作为主交互入口。
+
+验收：
+
+```text
+CC_CALLBACK_PROVIDER=feishu
+```
+
+运行任意已完成任务后：
+
+- 飞书指定 chat 能收到结果。
+- 本地 run 目录保留 callback 状态。
+- callback 失败时错误清晰，不影响 run 本身完成状态。
+
+### Phase 2: Feishu Input Provider
+
+第二阶段才做完整飞书聊天入口。
+
+目标：
+
+```text
+Feishu user message
+  -> feishu receiver/webhook
+  -> cc-controller route
+  -> CC/Codex role
+  -> feishu callback
+```
+
+需要设计：
+
+- 飞书事件订阅。
+- webhook 验签。
+- 消息去重。
+- 用户 allowlist/adminlist。
+- P2P 和群聊 chat_id 映射。
+- 与微信/QQ 的 `reply-project` 等价隔离。
+
+此阶段可以参考 `feishu-cli` 的消息读取、发送和 auth 逻辑，但不要把它直接当 receiver。
+
+验收：
+
+- 飞书发 `/查看` 能返回状态。
+- 飞书发 `发给codex 2+2等于几` 能回到飞书。
+- 微信/QQ/飞书三平台互不串台。
+
+### Setup Integration
+
+`setup.ps1` 增加飞书相关选项，但第一轮只标为 future。
+
+平台选择未来扩展为：
+
+```text
+1. 微信
+2. QQ (NapCat/OneBot)
+3. 微信 + QQ
+4. 飞书输出 callback
+5. 飞书完整聊天入口 (future)
+```
+
+当用户选择飞书输出 callback 时，提示：
+
+```text
+请先安装并登录 feishu-cli。
+然后填写 CC_FEISHU_CHAT_ID。
+```
+
+不要在 setup 第一轮中自动安装或登录 `feishu-cli`。
 
 ## Command Mapping Rules
 

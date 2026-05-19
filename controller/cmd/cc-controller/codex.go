@@ -152,6 +152,7 @@ func removeDuplicateOutput(text string) string {
 func runCodex(root, runID string) {
 	runDir := filepath.Join(root, "runs", runID)
 	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", os.Getpid()))
+	updateStatusJSON(runDir, "running", "codex_running", os.Getpid())
 
 	question, err := os.ReadFile(filepath.Join(runDir, "incoming-question.md"))
 	if err != nil {
@@ -159,6 +160,15 @@ func runCodex(root, runID string) {
 		return
 	}
 
+	// Backend selector: non-native backends use API path and return early.
+	backend := resolveCodexBackend()
+	if backend != CodexBackendNative {
+		cfg := resolveAPIConfig(backend)
+		runAPICodex(runDir, runID, string(question), cfg, backend)
+		return
+	}
+
+	// Native codex path continues below.
 	codexCmd := resolveCodexCmd()
 	setCodexProxy()
 
@@ -208,7 +218,7 @@ If no action is needed, write:
 					Stage:      "codex_running",
 					ElapsedSec: elapsed,
 				})
-				sendCallback(runDir, fmt.Sprintf("⏳ Codex 处理中\nRun ID: %s\n已用时: %ds", runID, elapsed))
+				sendCallback(runDir, heartbeatMsg("Codex", runID, elapsed, ""))
 			case <-done:
 				return
 			}
