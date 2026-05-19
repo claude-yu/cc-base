@@ -19,6 +19,9 @@ import (
 
 const timeFormat = "20060102-150405"
 
+// runIDPattern matches genRunID output: yyyyMMdd-HHmmss-<suffix>[-hex].
+var runIDPattern = regexp.MustCompile(`^\d{8}-\d{6}-`)
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -39,8 +42,11 @@ func main() {
 		mustHaveArgs(args, 1, "usage: cc-controller run-codex <RunId>")
 		runCodex(root, args[0])
 	case "show":
-		mustHaveArgs(args, 1, "usage: cc-controller show <RunId>")
-		showRun(root, args[0])
+		runID := ""
+		if len(args) >= 1 {
+			runID = args[0]
+		}
+		showRun(root, runID)
 	case "cancel":
 		if len(args) >= 1 && args[0] != "" {
 			cancelTask(root, args[0])
@@ -187,7 +193,13 @@ func runCC(root, runID string) {
 	claudeCmd := resolveClaudeCmd()
 	workDir := resolveWorkDir()
 
-	systemPrompt := "You are Claude Code acting as an advice-only assistant. Do not modify files. Do not run shell commands. Do not spawn subagents. Read files if needed, but return concise, structured output. Answer the user's question directly."
+	systemPrompt := `You are Claude Code acting as an advice-only assistant. Do not modify files. Do not run shell commands. Do not spawn subagents. Read files if needed, but return concise, structured output. Answer the user's question directly.
+
+Core rules:
+- 拒绝废话：直接给结论，不解释环境或定义
+- 简洁优先：用最少的输出解决问题，不要堆砌
+- 目标驱动：先确定要做什么，再组织输出
+- 大声失败：遇到不确定的就说不知道，不编造`
 
 	cmd := exec.Command(claudeCmd, "-p", "--system-prompt", systemPrompt, "--output-format", "text", "--no-session-persistence")
 	cmd.Dir = workDir
@@ -380,6 +392,12 @@ You are Codex acting as an independent technical advisor.
 Do not read files. Do not run commands. Do not modify anything.
 Answer the user's question directly based on your knowledge.
 
+Core rules:
+- 拒绝废话：直接给结论，不解释环境或定义
+- 简洁优先：用最少的输出解决问题，不要堆砌
+- 目标驱动：先确定要回答什么，再组织输出
+- 大声失败：遇到不确定的就说不知道，不编造
+
 At the end of your answer, include a "建议下一步" section:
 
 ## 建议下一步
@@ -543,7 +561,21 @@ func writeError(runDir string, err error) {
 }
 
 func showRun(root, runID string) {
-	runDir := filepath.Join(root, "runs", runID)
+	runsRoot := filepath.Join(root, "runs")
+	if runID == "" {
+		runID = findLatestRun(runsRoot)
+		if runID == "" {
+			fmt.Fprintln(os.Stderr, "没有任何 run 记录")
+			os.Exit(1)
+		}
+	}
+	runDir := filepath.Join(runsRoot, runID)
+	if fi, err := os.Stat(runDir); err != nil || !fi.IsDir() {
+		fmt.Fprintf(os.Stderr, "Run not found: %s\n", runID)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Run ID: %s\n状态: %s\n\n", runID, runStatus(runDir))
 
 	for _, name := range []string{"incoming-question.md", "cc-answer.md", "codex-answer.md", "summary.md"} {
 		data, err := os.ReadFile(filepath.Join(runDir, name))
@@ -552,4 +584,54 @@ func showRun(root, runID string) {
 		}
 		fmt.Printf("=== %s ===\n%s\n\n", name, string(data))
 	}
+}
+
+// findLatestRun returns the lexicographically newest run dir name.
+// Run IDs are timestamp-prefixed (yyyyMMdd-HHmmss-...), so lexical desc == chronological.
+func findLatestRun(runsRoot string) string {
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		return ""
+	}
+	var dirs []string
+	for _, e := range entries {
+		// Only real timestamped run dirs (yyyyMMdd-HHmmss-...); skip sidecar
+		// dirs like verify2-032548 / cc-restart that would otherwise win the
+		// lexical sort (letters sort after digits).
+		if e.IsDir() && runIDPattern.MatchString(e.Name()) {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	if len(dirs) == 0 {
+		return ""
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
+	return dirs[0]
+}
+
+func runStatus(runDir string) string {
+	if data, err := os.ReadFile(filepath.Join(runDir, "runner.exitcode.txt")); err == nil {
+		switch code := trimToken(string(data)); code {
+		case "0":
+			return "DONE"
+		case "-1":
+			return "CANCELLED"
+		default:
+			return "FAILED (exit " + code + ")"
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(runDir, "runner.pid")); err == nil {
+		if pid, err := strconv.Atoi(trimToken(string(data))); err == nil && isProcessRunning(pid) {
+			return "RUNNING"
+		}
+	}
+	return "UNKNOWN"
+}
+
+// trimToken strips a leading UTF-8 BOM (legacy PowerShell-written files have one)
+// plus surrounding whitespace, so single-token files compare reliably.
+func trimToken(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, string(rune(0xFEFF)))
+	return strings.TrimSpace(s)
 }

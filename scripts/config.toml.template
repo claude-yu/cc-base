@@ -88,8 +88,8 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
 name = "问cc"
-description = "异步询问 CC，完成后自动回传结果（Go binary）"
-exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe ask-cc {{args}}"
+description = "Session-aware CC 对话（别名保持，实际走 /cc 通道）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe exec-cc --text \"{{args}}\" --session default"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
@@ -108,6 +108,30 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 name = "取消任务"
 description = "取消正在运行的任务（/取消任务 <RunId>，不传 RunId 自动取消最近任务）"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "cc"
+description = "Session-aware CC 对话（自动判断模式：advice/readonly/execute_request）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe exec-cc --auto --text \"{{args}}\" --session default"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "执行"
+description = "执行已确认的任务（/执行 RunId，启动执行型 runner）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe execute {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "项目"
+description = "查看当前工作项目信息"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe project"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "切项目"
+description = "切换到指定项目（/切项目 work-15）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe switch {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 # ═══════════════════════════════════════
@@ -216,11 +240,11 @@ command = "帮我问一下 cc"
 
 [[aliases]]
 name = "opus"
-command = "帮我问一下 cc"
+command = "/cc"
 
 [[aliases]]
 name = "问cc"
-command = "帮我问一下 cc"
+command = "/cc"
 
 [[aliases]]
 name = "问claude"
@@ -287,6 +311,10 @@ name = "回传"
 command = "/自动回传"
 
 [[aliases]]
+name = "执行"
+command = "/执行"
+
+[[aliases]]
 name = "取消"
 command = "/取消任务"
 [[aliases]]
@@ -304,6 +332,34 @@ command = "/取消任务"
 [[aliases]]
 name = "stop"
 command = "/取消任务"
+
+[[aliases]]
+name = "项目"
+command = "/项目"
+
+[[aliases]]
+name = "项目信息"
+command = "/项目"
+
+[[aliases]]
+name = "当前项目"
+command = "/项目"
+
+[[aliases]]
+name = "当前项目信息"
+command = "/项目"
+
+[[aliases]]
+name = "切换项目"
+command = "/切项目"
+
+[[aliases]]
+name = "切换到"
+command = "/切项目"
+
+[[aliases]]
+name = "切项目"
+command = "/切项目"
 
 # ═══════════════════════════════════════
 # Claude Code project (WeChat)

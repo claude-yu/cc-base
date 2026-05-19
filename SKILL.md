@@ -38,14 +38,19 @@ skills/cc-base/
 │       ├── execute-approved.ps1      # /批准执行（需 APPROVE）
 │       ├── execute-manual-approved.ps1 # /人工批准执行
 │       ├── check-codex-cli.ps1       # Codex CLI 诊断工具
-│       ├── submit-codex-ask.ps1      # /问codex 入口（异步）
-│       ├── codex-ask-runner.ps1      # Codex ask 后台 runner + 自动回传
-│       ├── show-codex-ask.ps1        # /codex结果
+│       ├── submit-codex-ask.ps1      # ⚠️SUPERSEDED → Go cc-controller.exe ask-codex
+│       ├── codex-ask-runner.ps1      # ⚠️SUPERSEDED → Go cc-controller.exe run-codex
+│       ├── show-codex-ask.ps1        # ⚠️SUPERSEDED → Go cc-controller.exe show
 │       ├── chat-log-writer.ps1       # research-memory chat JSONL writer
 │       ├── auto-callback-toggle.ps1  # /自动回传 开/关
 │       ├── grill-plan.ps1            # /质询计划（Grill-Me）
 │       ├── instinct-status.ps1       # /学习状态
 │       └── evolve-instincts.ps1      # /进化习惯
+├── controller/                       # ★ Go 控制器源（codex-ask/cc-ask 权威实现）
+│   ├── go.mod
+│   └── cmd/cc-controller/
+│       ├── main.go                   # cc-controller.exe：ask-codex/ask-cc/run-*/show/cancel
+│       └── main_test.go              # readInput 保真 + findLatestRun 回归测试
 ├── rules/                            # 操作规则
 │   ├── encoding.md                   # GBK/UTF-8 编码规则
 │   ├── proxy.md                      # 代理隔离规则
@@ -155,9 +160,11 @@ cc-base 内置聊天入口学习能力，自动记录用户命令使用模式。
 
 ## 内置：Codex 异步问答
 
-`/问codex <问题>` 是 advice-only 异步问答入口，不走 `invoke-controller-command` wrapper，避免 wrapper RunId 和 AskRunId 双 ID。提交脚本自己负责生成 AskRunId、写 chat-log、启动 runner、自动回传。
+`/问codex <问题>` 是 advice-only 异步问答入口。**权威实现为 Go 二进制 `controller/cc-controller.exe`（源 `controller/cmd/cc-controller/main.go`）**，config.toml 调 `cc-controller.exe ask-codex {{args}}`；不走 `invoke-controller-command` wrapper，`ask-codex` 一次 `genRunID` 生成单一 RunId 贯穿后台 `run-codex` runner，写 run 目录 + callback 自动回传。Codex 调用用 `--sandbox read-only`。
 
-**查看结果**：`/codex结果 [RunId]`；不传 RunId 时显示最新 Codex ask run。
+> PS 脚本 `submit-codex-ask.ps1`/`codex-ask-runner.ps1`/`show-codex-ask.ps1`（及 cc-ask 同名变体）已 **SUPERSEDED-BY-GO**，保留作历史，不再调用。Go 重写结构性闭合了 Codex round-2 REVISE 全部 5 项（原生 args 消除 PowerShell `{{args}}` quoting 风险，已 go test 实证）。`rules/powershell.md` 的「文本去特殊字符 + 压成单行」约定**仍适用**（cc-connect→argv 行为不变），但其中的 PowerShell `[string[]]$ArgsRest` param 模板仅对 PS 时代脚本有效，Go 侧由 `readInput` 等价处理。
+
+**查看结果**：`/codex结果 [RunId]`；不传 RunId 时显示最新 run（Go `show` 经 `runIDPattern` 过滤 sidecar 目录，返回最新时间戳 run）。
 
 ## 可选：计划质询（Grill-Me）
 
