@@ -29,7 +29,7 @@ Replaces PowerShell `submit-cc-ask.ps1` / `cc-ask-runner.ps1` and `submit-codex-
 
 Source: `controller/cmd/cc-controller/` (8 `.go` files + 1 test file), built with:
 ```powershell
-& "C:\Go\bin\go.exe" build -C "E:\ai\selfwork_ytl\controller" -o "bin\cc-controller.exe" "./cmd/cc-controller/"
+go build -C "YOUR_PROJECT_ROOT\controller" -o "cc-controller.exe" "./cmd/cc-controller/"
 ```
 
 File organization (all `package main` in `controller/cmd/cc-controller/`):
@@ -230,11 +230,11 @@ controller/
 
 ## Deployment
 
-Scripts are edited in this repo, then copied to `E:\ai\selfwork_ytl\controller\bin\`. Go source in `controller/cmd/cc-controller/`, built to `controller/cc-controller.exe`. Real config edits go directly to `E:\ai\selfwork_ytl\cc-connect\config.toml` (never committed).
+Scripts are edited in this repo, then copied to `<project>/controller/bin/`. Go source in `controller/cmd/cc-controller/`, built to `<project>/controller/cc-controller.exe`. Real config edits go directly to `<project>/cc-connect/config.toml` (never committed).
 
 Build command:
 ```powershell
-cd E:\ai\selfwork_ytl\controller
+cd YOUR_PROJECT_ROOT\controller
 C:\Go\bin\go.exe build -o cc-controller.exe .\cmd\cc-controller\
 ```
 

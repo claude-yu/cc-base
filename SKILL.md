@@ -182,14 +182,14 @@ Glob ~/.claude/skills/**/SKILL.md
 - **多项目支持**：同一 controller 可配置多个科研项目，互不干扰
 - **项目级 session**：每个项目有独立 session 上下文（如 `work-9-default`、`work-15-default`）
 - **同层解析**：`/切项目 work-15` 自动解析到 `CC_WORK_DIR` 的同层目录
-- **完整路径**：也可用 `/切项目 G:\proteinwork\work-15` 切换任意目录
+- **完整路径**：也可用 `/切项目 E:\projects\work-15` 切换任意目录
 - **目录不存在**时提示创建，不自动创建（安全）
 
 **切换输出示例**：
 ```
 已切换项目
 Name: work-15
-WorkDir: G:\proteinwork\work-15
+WorkDir: E:\projects\work-15
 Session: work-15-default
 ```
 
