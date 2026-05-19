@@ -162,7 +162,7 @@ func cmdExecute(root, runID string) {
 	if sandboxEnv != "" && sandboxDir != "" && sandboxDir != sandboxEnv {
 		fmt.Fprintf(os.Stderr, "警告: runner.workdir (%s) 与 CC_EXECUTE_WORK_DIR (%s) 不一致\n", sandboxDir, sandboxEnv)
 	}
-	if sandboxEnv == "" {
+	if sandboxEnv == "" && sandboxDir == "" {
 		fmt.Fprintln(os.Stderr, "警告: CC_EXECUTE_WORK_DIR 未设置，执行将使用默认目录")
 	}
 
