@@ -544,6 +544,139 @@ func TestClassifyBucket(t *testing.T) {
 	}
 }
 
+// --- Schrodinger parseSchrodingerLog ---
+
+func TestParseSchrodingerLog_CleanCompletion(t *testing.T) {
+	tail := []string{
+		"Starting docking...",
+		"Best docking score: -8.5",
+		"Writing 10 poses to glide_sp_pv.maegz",
+		"Exiting Glide.",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "completed" {
+		t.Errorf("state=%q, want completed (clean exit)", state)
+	}
+}
+
+func TestParseSchrodingerLog_ErrorBeforeExit(t *testing.T) {
+	tail := []string{
+		"Starting docking...",
+		"FATAL: cannot read input file",
+		"Exiting Glide.",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "failed" {
+		t.Errorf("state=%q, want failed (error before Exiting Glide)", state)
+	}
+}
+
+func TestParseSchrodingerLog_ErrorAfterCompletionMarker(t *testing.T) {
+	tail := []string{
+		"All jobs have completed.",
+		"ERROR: post-processing failed",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "failed" {
+		t.Errorf("state=%q, want failed (error after completion marker)", state)
+	}
+}
+
+func TestParseSchrodingerLog_DefinitiveSuccessSummary(t *testing.T) {
+	tail := []string{
+		"Some processing...",
+		"ERROR: non-fatal warning in error_handler",
+		"6 of 6 job(s) succeeded; 0 job(s) failed.",
+		"Total elapsed time: 12:34:56",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "completed" {
+		t.Errorf("state=%q, want completed (definitive success summary)", state)
+	}
+}
+
+func TestParseSchrodingerLog_PartialFailureSummary(t *testing.T) {
+	tail := []string{
+		"Processing...",
+		"4 of 6 job(s) succeeded; 2 job(s) failed.",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "failed" {
+		t.Errorf("state=%q, want failed (partial failure summary)", state)
+	}
+}
+
+func TestParseSchrodingerLog_NoMarkers(t *testing.T) {
+	tail := []string{
+		"Processing ligand 42...",
+		"Docking pose generated",
+	}
+	state, _ := parseSchrodingerLog(tail, sjGlideDock)
+	if state != "running" {
+		t.Errorf("state=%q, want running (no markers)", state)
+	}
+}
+
+func TestParseSchrodingerLog_ErrorsOnly(t *testing.T) {
+	tail := []string{
+		"Starting...",
+		"Fatal error: license checkout failed",
+	}
+	state, _ := parseSchrodingerLog(tail, sjLigPrep)
+	if state != "failed" {
+		t.Errorf("state=%q, want failed (error without completion)", state)
+	}
+}
+
+// --- Schrodinger classifySchrodingerDir ---
+
+func TestClassifySchrodingerDir(t *testing.T) {
+	cases := []struct {
+		dirName string
+		want    schrodingerJobType
+	}{
+		{"glide-dock_SP", sjGlideDock},
+		{"Glide_SP_1", sjGlideDock},
+		{"glide_xp_binding", sjGlideDock},
+		{"glide_htvs_screen", sjGlideDock},
+		{"glide-grid_bigbox", sjGlideGrid},
+		{"Glide_Grid_1", sjGlideGrid},
+		{"ligprep_library", sjLigPrep},
+		{"proteinprep_1abc", sjProteinPrep},
+		{"prot-prot-docking_complex", sjProtProtDock},
+		{"prot-prot_1", sjProtProtDock},
+		{"some_random_dir", sjUnknown},
+	}
+	for _, tc := range cases {
+		got := classifySchrodingerDir(tc.dirName)
+		if got != tc.want {
+			t.Errorf("classifySchrodingerDir(%q) = %d, want %d", tc.dirName, got, tc.want)
+		}
+	}
+}
+
+// --- Schrodinger Inspect: failed log + output files = still failed ---
+
+func TestSchrodingerInspect_FailedLogWithOutputFiles(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "glide-dock_test")
+	os.MkdirAll(sub, 0755)
+
+	// Write a log with errors + completion marker
+	logContent := "Starting Glide...\nFATAL: cannot allocate memory\nExiting Glide.\n"
+	os.WriteFile(filepath.Join(sub, "glide-dock_test.log"), []byte(logContent), 0644)
+
+	// Write output files that would normally suggest completion
+	os.WriteFile(filepath.Join(sub, "glide-dock_test_pv.maegz"), []byte{}, 0644)
+	os.WriteFile(filepath.Join(sub, "results.csv"), []byte("score\n-8.5\n"), 0644)
+
+	d := &schrodingerDetector{}
+	rs := d.Inspect(sub)
+	if rs.State != "failed" {
+		t.Errorf("state=%q, want failed (log has errors, output files should NOT override)", rs.State)
+	}
+}
+
 // --- statePriority sorting ---
 
 func TestStatePrioritySorting(t *testing.T) {

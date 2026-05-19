@@ -257,23 +257,13 @@ func findSchrodingerLog(dir, dirName string) string {
 func parseSchrodingerLog(tail []string, jt schrodingerJobType) (string, []string) {
 	var evidence []string
 	hasErrors := false
+	hasCompleted := false
 
 	for _, line := range tail {
 		lower := strings.ToLower(strings.TrimSpace(line))
 		trimmed := strings.TrimSpace(line)
 
-		// Completion markers
-		if strings.Contains(lower, "all jobs have completed") ||
-			strings.Contains(lower, "all jobs succeeded") {
-			evidence = append(evidence, "完成: "+trimmed)
-			return "completed", evidence
-		}
-		if strings.Contains(lower, "exiting glide") {
-			evidence = append(evidence, "完成: "+trimmed)
-			return "completed", evidence
-		}
-
-		// Job success/failure summary
+		// Definitive success/failure summary — early return
 		if strings.Contains(lower, "job(s) succeeded") {
 			if strings.Contains(lower, "0 job(s) failed") || !strings.Contains(lower, "job(s) failed") {
 				evidence = append(evidence, "完成: "+trimmed)
@@ -281,6 +271,15 @@ func parseSchrodingerLog(tail []string, jt schrodingerJobType) (string, []string
 			}
 			evidence = append(evidence, "部分失败: "+trimmed)
 			return "failed", evidence
+		}
+
+		// Ambiguous completion markers — defer, errors take priority
+		if strings.Contains(lower, "all jobs have completed") ||
+			strings.Contains(lower, "all jobs succeeded") ||
+			strings.Contains(lower, "exiting glide") {
+			evidence = append(evidence, "完成: "+trimmed)
+			hasCompleted = true
+			continue
 		}
 
 		// Docking score
@@ -310,6 +309,9 @@ func parseSchrodingerLog(tail []string, jt schrodingerJobType) (string, []string
 
 	if hasErrors {
 		return "failed", evidence
+	}
+	if hasCompleted {
+		return "completed", evidence
 	}
 	return "running", evidence
 }
