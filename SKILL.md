@@ -48,7 +48,7 @@ skills/cc-base/
 │       └── evolve-instincts.ps1      # /进化习惯
 ├── controller/                       # ★ Go 控制器（session-aware cc/codex 权威实现）
 │   ├── go.mod
-│   └── cmd/cc-controller/            # 15 文件（13 源码 + 2 测试）
+│   └── cmd/cc-controller/            # 18 文件（14 源码 + 4 测试）
 │       ├── main.go                   # 入口、类型、main() switch、usage()
 │       ├── common.go                 # 共享辅助函数
 │       ├── ask.go                    # genRunID、stateless ask
@@ -62,8 +62,12 @@ skills/cc-base/
 │       ├── backend.go                # Backend 选择器（native/openai/deepseek/glm）+ API client
 │       ├── queue.go                  # Waiting queue（CRUD + prune + 智能分发）
 │       ├── monitor.go                # Stuck/zombie task 监控 + 自动清理
+│       ├── detector.go               # 科研任务 detector 框架（GROMACS/Python/R/GenericCLI）
+│       ├── detector_docker.go        # Docker 容器 detector（prosettac/haddock3/colabfold/rosetta 等）
+│       ├── research_monitor.go       # /科研监控 命令处理 + 报告生成 + 手机端摘要
 │       ├── main_test.go              # 单元测试（classifier、readInput、findLatestRun）
-│       └── classify_test.go          # 分类器测试
+│       ├── classify_test.go          # 分类器测试
+│       └── detector_test.go          # detector 单元测试（37 tests, 含误判防护）
 ├── rules/                            # 操作规则
 │   ├── encoding.md                   # GBK/UTF-8 编码规则
 │   ├── proxy.md                      # 代理隔离规则
@@ -80,6 +84,7 @@ skills/cc-base/
     ├── instinct-learning.md          # ★ Chat-Instinct 学习系统文档
     ├── mobile-agent-next-plan.md     # 移动端 Agent 改进计划 + 踩坑实录
     ├── research-memory-plan.md       # Research-Memory bridge（冻结规格，未实现）
+    ├── research-job-monitor-plan.md  # ★ 科研任务监控框架设计 + detector 规格
     ├── wechat-setup.md               # ★ WeChat 企业号接入引导
     └── qq-setup.md                   # ★ QQ NapCat Docker 接入引导
 ```
@@ -101,6 +106,7 @@ skills/cc-base/
 | Backend 抽象架构 | `docs/backend-abstraction-plan.md` |
 | Chat-Instinct 学习系统 | `docs/instinct-learning.md` |
 | Research-Memory bridge | `docs/research-memory-plan.md`（冻结规格，未实现） |
+| 科研任务监控框架 | `docs/research-job-monitor-plan.md` |
 | WeChat 接入 | `docs/wechat-setup.md` |
 | QQ NapCat 接入 | `docs/qq-setup.md` |
 | 所有脚本源码 | `scripts/bin/*.ps1` |
@@ -126,6 +132,7 @@ skills/cc-base/
 | `/执行 <RunId>` | 执行已确认的任务（完整工具权限） |
 | `/取消任务 [RunId]` | 取消正在运行的任务 |
 | `/监控` | 检查 stuck/zombie 任务，自动清理并通知 |
+| `/科研监控` | 扫描科研项目目录，检测 GROMACS/Python/R/Docker 任务状态（只读） |
 | `/自检` | 12 项安装自检（Claude/Codex/cc-connect/Go/Docker/config 等） |
 | `/学习状态` | 查看 chat-instinct 观察记录和习惯统计 |
 | `/进化习惯` | 分析观察记录，生成习惯进化候选 |

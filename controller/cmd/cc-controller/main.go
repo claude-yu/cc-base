@@ -123,6 +123,8 @@ func main() {
 		cmdProject(root)
 	case "monitor":
 		cmdMonitor(root)
+	case "research-monitor":
+		cmdResearchMonitor(root, args)
 	case "status":
 		full := false
 		for _, a := range args {
@@ -164,6 +166,8 @@ Commands:
   cancel [RunId]          Cancel a running task (omit RunId to cancel latest)
   project                 Show active project info
   monitor                 Scan running tasks for stuck/zombie state
+  research-monitor        Scan research project for job status (Python/R/GROMACS)
+           [--detector <name>]  Filter to specific detector
   status                  Show condensed status (default, mobile-friendly)
   status --full           Show full verbose status dashboard
   switch <name|path>      Switch to another project`)

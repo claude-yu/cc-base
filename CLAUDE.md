@@ -48,8 +48,12 @@ File organization (all `package main` in `controller/cmd/cc-controller/`):
 | `backend.go` | Backend selector (CC_CODEX_BACKEND env var), runAPICodex (OpenAI-compatible HTTP client), loud-fail on missing key |
 | `queue.go` | Waiting queue CRUD (waiting_queue.json), queuePrune, smart dispatch (0→reject/1→execute/N→ask) |
 | `monitor.go` | Stuck/zombie task watchdog, heartbeat threshold escalation (3/5/10min), auto-cleanup + callback |
+| `detector.go` | Research job detector framework (GROMACS/Python/R/GenericCLI), scoring, context.json parsing, false-positive filtering |
+| `detector_docker.go` | Docker container detector (prosettac/haddock3/colabfold/rosetta/rfdiffusion/gromacs/alphafold) |
+| `research_monitor.go` | /科研监控 command handler, directory scanning, mobile summary, detail report |
 | `main_test.go` | Unit tests (classifier, readInput, findLatestRun, sidecar filtering) |
 | `classify_test.go` | Classifier test cases |
+| `detector_test.go` | Detector unit tests (37 tests: scoring, false-positive prevention, state detection, Docker parsing) |
 
 Subcommands:
 - `ask-cc <text>` — stateless: generate RunId, write incoming question, detach `run-cc` background process, print RunId
@@ -61,6 +65,7 @@ Subcommands:
 - `cancel [RunId]` — cancel running task (omit = cancel latest active task by PID scan)
 - `execute [N|RunId]` — execute confirmed task from waiting queue (omit = smart dispatch)
 - `monitor` — scan for stuck/zombie tasks, auto-cleanup, send callback notifications
+- `research-monitor [--detector <name>]` — scan research project for job status (GROMACS/Python/R/Docker), read-only
 - `status` — system status dashboard (project info, active tasks, recent runs)
 
 Key advantages over PowerShell:
@@ -232,6 +237,7 @@ controller/
 | `cc-controller.exe` | `/codex结果 [RunId]` | Codex ask status/result (Go) |
 | `cc-controller.exe` | `/取消任务 [RunId]` | Cancel running task by RunId (omit = cancel latest) (Go) |
 | `cc-controller.exe` | `/监控` | Stuck/zombie task monitor + auto-cleanup (Go) |
+| `cc-controller.exe` | `/科研监控` | Research job monitor — GROMACS/Python/R/Docker detector (Go) |
 | `check-install.ps1` | `/自检` | 12-item installation self-check (PS) |
 | `submit-plan-review.ps1` | `/计划审查 <task>` | CC plan + Codex review (async, PS) |
 | `show-plan-review.ps1` | `/查看审查 [RunId]` | Plan review status/result (PS) |

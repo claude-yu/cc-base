@@ -19,6 +19,7 @@
 | **自动修复** | `/修复 <问题>` | CC 自动修复 controller/cc-connect 基础设施报错 |
 | **系统状态** | `/状态` | 系统状态仪表盘（项目、活动任务、卡住检测） |
 | **任务监控** | `/监控` | Stuck/zombie task 检测 + 自动清理 + callback 通知 |
+| **科研监控** | `/科研监控` | 扫描科研项目目录，检测 GROMACS/Python/R/Docker 任务状态（只读） |
 | **安装自检** | `/自检` | 12 项安装检查（CLI/config/命令/环境变量） |
 | **状态监控** | `/md状态检查 [目录]` | 只读扫描 GROMACS MD 工作目录和 log tail |
 | **任务执行** | `/执行 <RunId>` | 二次确认后执行任务（完整工具权限） |
@@ -63,7 +64,7 @@ cc-connect（Go 多平台聊天网关）
     │   └── 命令 → cc-controller.exe（Go 控制器）
     │
     └── [[commands]] 路由
-        ├── Go 二进制直调：/cc /问codex /项目 /切项目 /执行
+        ├── Go 二进制直调：/cc /问codex /项目 /切项目 /执行 /科研监控
         ├── PowerShell pipeline：/计划审查 /查看审查 /质询计划
         └── PowerShell 单步：/修复controller /md状态检查 /学习状态
 ```
@@ -94,7 +95,7 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 
 ### Go 控制器结构
 
-`cc-controller.exe`（15 文件，`controller/cmd/cc-controller/`）：
+`cc-controller.exe`（18 文件，`controller/cmd/cc-controller/`）：
 
 | 文件 | 职责 |
 |------|------|
@@ -111,8 +112,12 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 | `backend.go` | Backend 选择器（native/API）+ API client |
 | `queue.go` | Waiting queue（入队/分发/清理） |
 | `monitor.go` | Stuck/zombie task 监控 + 自动清理 |
+| `detector.go` | 科研任务 detector（GROMACS/Python/R/GenericCLI） |
+| `detector_docker.go` | Docker 容器 detector |
+| `research_monitor.go` | /科研监控 命令处理 + 报告 |
 | `main_test.go` | 单元测试 |
 | `classify_test.go` | 分类器测试 |
+| `detector_test.go` | detector 测试（37 tests） |
 
 ---
 
@@ -155,6 +160,7 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 | `/进化习惯` | 进化 | 生成习惯进化候选 | PS |
 | `/自动回传 开/关` | 回传 | 开关自动回传 | PS |
 | `/监控` | monitor、检查任务 | 检测 stuck/zombie 任务 | Go |
+| `/科研监控` | 任务监控、运行监控、research | 扫描科研任务状态（GROMACS/Python/R/Docker） | Go |
 | `/自检` | 检查安装 | 12 项安装自检 | PS |
 
 ---
