@@ -63,6 +63,8 @@ func doFullScan(root, filterDetector string) {
 		results = append(results, dockerResults...)
 	}
 
+	results = deduplicateByWorkDir(results)
+
 	sort.SliceStable(results, func(i, j int) bool {
 		pi := statePriority[results[i].State]
 		pj := statePriority[results[j].State]
@@ -95,6 +97,39 @@ func doFullScan(root, filterDetector string) {
 
 	summary := formatMobileSummary(results, runDir)
 	fmt.Print(summary)
+}
+
+func deduplicateByWorkDir(results []ResearchStatus) []ResearchStatus {
+	bestScore := map[string]int{}
+	for _, rs := range results {
+		key := dedupeKey(rs)
+		if rs.Score > bestScore[key] {
+			bestScore[key] = rs.Score
+		}
+	}
+	var deduped []ResearchStatus
+	seen := map[string]bool{}
+	for _, rs := range results {
+		key := dedupeKey(rs)
+		if seen[key] {
+			continue
+		}
+		if rs.Score == bestScore[key] {
+			deduped = append(deduped, rs)
+			seen[key] = true
+		}
+	}
+	return deduped
+}
+
+func dedupeKey(rs ResearchStatus) string {
+	if rs.WorkDir != "" {
+		return rs.WorkDir
+	}
+	if len(rs.KeyFiles) > 0 {
+		return rs.Detector + ":" + rs.KeyFiles[0]
+	}
+	return rs.Detector
 }
 
 func classifyBucket(rs ResearchStatus) string {

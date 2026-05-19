@@ -42,6 +42,7 @@ var statePriority = map[string]int{
 func allDetectors() []Detector {
 	return []Detector{
 		&gromacsDetector{},
+		&schrodingerDetector{},
 		&pythonDetector{},
 		&rDetector{},
 		&genericCLIDetector{},
@@ -120,6 +121,24 @@ func readTail(path string, n int) []string {
 	}
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func readHead(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	buf := make([]byte, 8192)
+	nr, _ := f.Read(buf)
+	if nr == 0 {
+		return nil
+	}
+	lines := strings.Split(string(buf[:nr]), "\n")
+	if len(lines) > n {
+		lines = lines[:n]
 	}
 	return lines
 }
