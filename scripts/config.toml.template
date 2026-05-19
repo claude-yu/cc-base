@@ -672,16 +672,7 @@ command = "/自检"
 name = "selfcheck"
 command = "/自检"
 
-# --- 科研监控 ---
-[[aliases]]
-name = "科研监控"
-command = "/科研监控"
-[[aliases]]
-name = "任务监控"
-command = "/科研监控"
-[[aliases]]
-name = "运行监控"
-command = "/科研监控"
+# --- 科研监控 (non-slash oral aliases only; /科研监控 /任务监控 /运行监控 are [[commands]]) ---
 [[aliases]]
 name = "研究监控"
 command = "/科研监控"

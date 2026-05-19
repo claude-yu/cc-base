@@ -133,8 +133,42 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 	}
 	rs.KeyFiles = []string{c.Names}
 	rs.LastUpdate = c.Status
+	rs.LastUpdateMins = parseDockerAgeMins(c.Status)
 	rs.Score = 50
 	return rs
+}
+
+func parseDockerAgeMins(status string) int {
+	// "Exited (0) 2 days ago" → ~2880 min
+	// "Up 5 hours" → ~300 min
+	lower := strings.ToLower(status)
+	n := 0
+	for _, c := range lower {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		} else if n > 0 {
+			break
+		}
+	}
+	if n == 0 {
+		return -1
+	}
+	if strings.Contains(lower, "minute") {
+		return n
+	}
+	if strings.Contains(lower, "hour") {
+		return n * 60
+	}
+	if strings.Contains(lower, "day") {
+		return n * 24 * 60
+	}
+	if strings.Contains(lower, "week") {
+		return n * 7 * 24 * 60
+	}
+	if strings.Contains(lower, "month") {
+		return n * 30 * 24 * 60
+	}
+	return -1
 }
 
 func readDockerLogs(containerID string, lines int) []string {

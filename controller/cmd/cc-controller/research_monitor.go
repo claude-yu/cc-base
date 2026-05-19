@@ -69,12 +69,9 @@ func cmdResearchMonitor(root string, args []string) {
 		UpdatedAt: time.Now().Format(timeFormat),
 	})
 
-	// Mobile summary to stdout (cc-connect returns this)
+	// Mobile summary to stdout (cc-connect captures and sends to user)
 	summary := formatMobileSummary(results, runDir)
 	fmt.Print(summary)
-
-	// Callback
-	sendCallback(runDir, summary)
 }
 
 func resolveMonitorRoot() string {
@@ -154,59 +151,166 @@ func walkDirs(dir string, currentDepth, maxDepth int, fn func(string, int)) {
 	}
 }
 
-// formatMobileSummary generates a short mobile-friendly status.
+const recentThresholdMins = 24 * 60 // 24h: recent vs historical
+
+// formatMobileSummary generates a compact mobile-friendly status.
 func formatMobileSummary(results []ResearchStatus, runDir string) string {
 	if len(results) == 0 {
 		return "科研监控: 未发现任何可识别的科研任务\n建议: 确认 CC_WORK_DIR 或 CC_RESEARCH_MONITOR_ROOT 指向科研项目目录\n"
 	}
 
+	// Count by state
+	counts := map[string]int{}
+	for _, rs := range results {
+		counts[rs.State]++
+	}
+
 	var sb strings.Builder
 	sb.WriteString("科研监控: " + itoa(len(results)) + " 个任务\n")
 
-	for i, rs := range results {
-		if i >= 5 {
-			sb.WriteString("... 还有 " + itoa(len(results)-5) + " 个任务\n")
-			break
+	// State count line
+	stateOrder := []string{"failed", "stuck", "running", "completed", "idle", "unknown"}
+	var parts []string
+	for _, s := range stateOrder {
+		if c := counts[s]; c > 0 {
+			parts = append(parts, strings.ToUpper(s)+" "+itoa(c))
 		}
-		stateTag := strings.ToUpper(rs.State)
-		line := itoa(i+1) + ". [" + stateTag + "] " + rs.Detector
-		if rs.Confidence != "" {
-			line += " " + rs.Confidence
-		}
+	}
+	if len(parts) > 0 {
+		sb.WriteString(strings.Join(parts, " | ") + "\n")
+	}
 
-		// Show the most useful evidence line
-		if rs.ContextPhase != "" {
-			line += " — " + rs.ContextPhase
-		} else if len(rs.Evidence) > 0 {
-			ev := rs.Evidence[0]
-			if len(ev) > 60 {
-				ev = ev[:60] + "..."
-			}
-			line += " — " + ev
+	// Split into recent (<24h) and historical (>24h) failures/stuck
+	var recentAlerts []ResearchStatus
+	var histAlerts []ResearchStatus
+	for _, rs := range results {
+		if rs.State != "failed" && rs.State != "stuck" {
+			continue
 		}
-		sb.WriteString(line + "\n")
-
-		// Show top warnings for failed/stuck
-		if (rs.State == "failed" || rs.State == "stuck") && len(rs.Evidence) > 1 {
-			for j := 1; j < len(rs.Evidence) && j <= defaultMobileLines; j++ {
-				ev := rs.Evidence[j]
-				if len(ev) > 80 {
-					ev = ev[:80] + "..."
-				}
-				sb.WriteString("   " + ev + "\n")
-			}
-		}
-
-		// Show next actions for completed
-		if rs.State == "completed" && len(rs.NextActions) > 0 {
-			sb.WriteString("   建议: " + strings.Join(rs.NextActions, ", ") + "\n")
+		if rs.LastUpdateMins >= 0 && rs.LastUpdateMins > recentThresholdMins {
+			histAlerts = append(histAlerts, rs)
+		} else {
+			recentAlerts = append(recentAlerts, rs)
 		}
 	}
 
-	relDir := filepath.Base(filepath.Dir(runDir)) + "/" + filepath.Base(runDir)
-	sb.WriteString("详情: runs/" + filepath.Base(runDir) + "/report.md\n")
-	_ = relDir
+	// Recent high-priority alerts (max 3, one line each)
+	if len(recentAlerts) > 0 {
+		sb.WriteString("\n高优先级异常:\n")
+		for i, rs := range recentAlerts {
+			if i >= 3 {
+				sb.WriteString("... 还有 " + itoa(len(recentAlerts)-3) + " 个近期异常\n")
+				break
+			}
+			line := itoa(i+1) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector)
+			if rs.ContextPhase != "" {
+				line += " — " + rs.ContextPhase
+			} else if len(rs.Evidence) > 0 {
+				ev := firstUsefulEvidence(rs.Evidence)
+				if len(ev) > 50 {
+					ev = ev[:50] + "..."
+				}
+				line += " — " + ev
+			}
+			sb.WriteString(line + "\n")
+		}
+	}
+
+	// Historical failures — grouped by detector
+	if len(histAlerts) > 0 {
+		sb.WriteString("\n历史异常 (>24h): " + itoa(len(histAlerts)) + " 个\n")
+		groups := groupByDetector(histAlerts)
+		for _, g := range groups {
+			age := ""
+			if g.results[0].LastUpdate != "" {
+				age = " (" + g.results[0].LastUpdate + ")"
+			}
+			sb.WriteString("- " + detectorShortName(g.detector) + " x" + itoa(len(g.results)) + age + "\n")
+		}
+	}
+
+	// Running tasks (max 2)
+	var running []ResearchStatus
+	for _, rs := range results {
+		if rs.State == "running" {
+			running = append(running, rs)
+		}
+	}
+	if len(running) > 0 {
+		sb.WriteString("\n运行中:\n")
+		for i, rs := range running {
+			if i >= 2 {
+				sb.WriteString("... 还有 " + itoa(len(running)-2) + " 个运行中\n")
+				break
+			}
+			line := "- " + detectorShortName(rs.Detector)
+			if rs.ContextPhase != "" {
+				line += " — " + rs.ContextPhase
+			} else if rs.LastUpdate != "" {
+				line += " — " + rs.LastUpdate + "更新"
+			}
+			sb.WriteString(line + "\n")
+		}
+	}
+
+	sb.WriteString("\n详情: runs/" + filepath.Base(runDir) + "/report.md\n")
 	return sb.String()
+}
+
+func detectorShortName(det string) string {
+	// "docker:haddock3" → "HADDOCK3"
+	// "gromacs" → "GROMACS"
+	// "python_pipeline" → "Python"
+	// "r_pipeline" → "R"
+	// "generic_cli" → "CLI"
+	if strings.HasPrefix(det, "docker:") {
+		return strings.ToUpper(strings.TrimPrefix(det, "docker:"))
+	}
+	switch det {
+	case "gromacs":
+		return "GROMACS"
+	case "python_pipeline":
+		return "Python"
+	case "r_pipeline":
+		return "R"
+	case "generic_cli":
+		return "CLI"
+	default:
+		return det
+	}
+}
+
+func firstUsefulEvidence(evidence []string) string {
+	for _, e := range evidence {
+		if strings.HasPrefix(e, "ERROR:") || strings.HasPrefix(e, "LOG-ERROR:") {
+			return strings.TrimPrefix(strings.TrimPrefix(e, "ERROR: "), "LOG-ERROR: ")
+		}
+	}
+	if len(evidence) > 0 {
+		return evidence[0]
+	}
+	return ""
+}
+
+type detectorGroup struct {
+	detector string
+	results  []ResearchStatus
+}
+
+func groupByDetector(results []ResearchStatus) []detectorGroup {
+	order := []string{}
+	m := map[string][]ResearchStatus{}
+	for _, rs := range results {
+		if _, seen := m[rs.Detector]; !seen {
+			order = append(order, rs.Detector)
+		}
+		m[rs.Detector] = append(m[rs.Detector], rs)
+	}
+	var groups []detectorGroup
+	for _, det := range order {
+		groups = append(groups, detectorGroup{detector: det, results: m[det]})
+	}
+	return groups
 }
 
 // writeDetailReport writes the full report.md to the run directory.

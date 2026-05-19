@@ -18,17 +18,18 @@ type Detector interface {
 }
 
 type ResearchStatus struct {
-	Detector     string   `json:"detector"`
-	State        string   `json:"state"`      // running|completed|stuck|failed|idle|unknown
-	Confidence   string   `json:"confidence"` // high|medium|low
-	Score        int      `json:"score"`
-	WorkDir      string   `json:"work_dir"`
-	KeyFiles     []string `json:"key_files"`
-	LastUpdate   string   `json:"last_update,omitempty"`
-	Evidence     []string `json:"evidence"`
-	Warnings     []string `json:"warnings,omitempty"`
-	NextActions  []string `json:"next_actions,omitempty"`
-	ContextPhase string   `json:"context_phase,omitempty"`
+	Detector       string   `json:"detector"`
+	State          string   `json:"state"`      // running|completed|stuck|failed|idle|unknown
+	Confidence     string   `json:"confidence"` // high|medium|low
+	Score          int      `json:"score"`
+	WorkDir        string   `json:"work_dir"`
+	KeyFiles       []string `json:"key_files"`
+	LastUpdate     string   `json:"last_update,omitempty"`
+	LastUpdateMins int      `json:"last_update_mins,omitempty"` // minutes since last activity (-1 = unknown)
+	Evidence       []string `json:"evidence"`
+	Warnings       []string `json:"warnings,omitempty"`
+	NextActions    []string `json:"next_actions,omitempty"`
+	ContextPhase   string   `json:"context_phase,omitempty"`
 }
 
 var statePriority = map[string]int{
@@ -263,6 +264,9 @@ func (d *gromacsDetector) Inspect(dir string) ResearchStatus {
 	newest, newestFile := newestModTime(dir, []string{"md.log", "*.cpt", "*.xtc", "*.edr", "*.trr"})
 	if !newest.IsZero() {
 		rs.LastUpdate = fmtMinsAgo(newest)
+		rs.LastUpdateMins = minsAgo(newest)
+	} else {
+		rs.LastUpdateMins = -1
 	}
 
 	// Read md.log tail
@@ -476,6 +480,9 @@ func (d *pythonDetector) Inspect(dir string) ResearchStatus {
 	newest, newestFile := newestModTime(dir, allPatterns)
 	if !newest.IsZero() {
 		rs.LastUpdate = fmtMinsAgo(newest)
+		rs.LastUpdateMins = minsAgo(newest)
+	} else {
+		rs.LastUpdateMins = -1
 	}
 
 	// Check logs for errors
@@ -716,6 +723,9 @@ func (d *rDetector) Inspect(dir string) ResearchStatus {
 	})
 	if !newest.IsZero() {
 		rs.LastUpdate = fmtMinsAgo(newest)
+		rs.LastUpdateMins = minsAgo(newest)
+	} else {
+		rs.LastUpdateMins = -1
 	}
 
 	// Check .Rout logs for errors
@@ -817,6 +827,9 @@ func (d *genericCLIDetector) Inspect(dir string) ResearchStatus {
 	newest, newestFile := newestModTime(dir, []string{"*.log", "*.out", "stdout.txt"})
 	if !newest.IsZero() {
 		rs.LastUpdate = fmtMinsAgo(newest)
+		rs.LastUpdateMins = minsAgo(newest)
+	} else {
+		rs.LastUpdateMins = -1
 	}
 
 	// Read the most recent log file
