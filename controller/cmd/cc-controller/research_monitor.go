@@ -11,23 +11,43 @@ import (
 )
 
 const (
-	defaultScanDepth    = 3
-	defaultMaxLogLines  = 80
-	defaultMobileLines  = 5
+	defaultScanDepth        = 3
+	defaultMaxLogLines      = 80
+	defaultMobileLines      = 5
+	recentThresholdMins     = 24 * 60     // <24h = active_failed
+	archivedThresholdMins   = 7 * 24 * 60 // >7d = archived_failed
 )
 
-// cmdResearchMonitor is the entry point for /科研监控.
 func cmdResearchMonitor(root string, args []string) {
-	workDir := resolveMonitorRoot()
-
-	// Parse optional --detector flag for compat (/md状态检查 → --detector gromacs)
 	filterDetector := ""
+	var positional []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--detector" && i+1 < len(args) {
 			filterDetector = args[i+1]
 			i++
+		} else {
+			positional = append(positional, args[i])
 		}
 	}
+
+	subcmd := strings.TrimSpace(strings.Join(positional, " "))
+
+	switch {
+	case subcmd == "" || subcmd == "刷新":
+		doFullScan(root, filterDetector)
+	case subcmd == "历史":
+		showFiltered(root, "historical")
+	case subcmd == "全部":
+		showFiltered(root, "all")
+	case isNumeric(subcmd):
+		showTaskDetail(root, atoiSafe(subcmd))
+	default:
+		showTaskByKeyword(root, subcmd)
+	}
+}
+
+func doFullScan(root, filterDetector string) {
+	workDir := resolveMonitorRoot()
 
 	scanDepth := defaultScanDepth
 	if v := os.Getenv("CC_RESEARCH_SCAN_DEPTH"); v != "" {
@@ -38,13 +58,11 @@ func cmdResearchMonitor(root string, args []string) {
 
 	results := scanProject(workDir, scanDepth, filterDetector)
 
-	// Append Docker container scan (unless filtering to a specific detector)
 	if filterDetector == "" || strings.HasPrefix(filterDetector, "docker") {
 		dockerResults := scanDockerContainers()
 		results = append(results, dockerResults...)
 	}
 
-	// Sort: failed > stuck > running > completed > idle > unknown
 	sort.SliceStable(results, func(i, j int) bool {
 		pi := statePriority[results[i].State]
 		pj := statePriority[results[j].State]
@@ -54,7 +72,11 @@ func cmdResearchMonitor(root string, args []string) {
 		return results[i].Score > results[j].Score
 	})
 
-	// Write detail report to runs/
+	for i := range results {
+		results[i].Index = i + 1
+		results[i].Bucket = classifyBucket(results[i])
+	}
+
 	runID := genRunID("research-monitor")
 	runDir := filepath.Join(root, "runs", runID)
 	os.MkdirAll(runDir, 0755)
@@ -69,9 +91,224 @@ func cmdResearchMonitor(root string, args []string) {
 		UpdatedAt: time.Now().Format(timeFormat),
 	})
 
-	// Mobile summary to stdout (cc-connect captures and sends to user)
+	writeFile(filepath.Join(root, "latest-monitor-run.txt"), runID)
+
 	summary := formatMobileSummary(results, runDir)
 	fmt.Print(summary)
+}
+
+func classifyBucket(rs ResearchStatus) string {
+	if rs.State == "stuck" {
+		if rs.LastUpdateMins > archivedThresholdMins {
+			return "archived_stuck"
+		}
+		return ""
+	}
+	if rs.State != "failed" {
+		return ""
+	}
+	if rs.LastUpdateMins < 0 {
+		return "active_failed"
+	}
+	if rs.LastUpdateMins <= recentThresholdMins {
+		return "active_failed"
+	}
+	if rs.LastUpdateMins <= archivedThresholdMins {
+		return "historical_failed"
+	}
+	return "archived_failed"
+}
+
+func loadLatestResults(root string) ([]ResearchStatus, string) {
+	data, err := os.ReadFile(filepath.Join(root, "latest-monitor-run.txt"))
+	if err != nil {
+		return nil, ""
+	}
+	runID := strings.TrimSpace(string(data))
+	if runID == "" {
+		return nil, ""
+	}
+	jdata, err := os.ReadFile(filepath.Join(root, "runs", runID, "monitor-results.json"))
+	if err != nil {
+		return nil, ""
+	}
+	var results []ResearchStatus
+	if json.Unmarshal(jdata, &results) != nil {
+		return nil, ""
+	}
+	return results, runID
+}
+
+func showTaskDetail(root string, index int) {
+	results, _ := loadLatestResults(root)
+	if results == nil {
+		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+		return
+	}
+	for _, rs := range results {
+		if rs.Index == index {
+			fmt.Print(formatTaskDetail(rs))
+			return
+		}
+	}
+	fmt.Println("未找到任务 #" + itoa(index) + "（共 " + itoa(len(results)) + " 个任务）")
+}
+
+func showTaskByKeyword(root, keyword string) {
+	results, _ := loadLatestResults(root)
+	if results == nil {
+		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+		return
+	}
+	lower := strings.ToLower(keyword)
+	var matches []ResearchStatus
+	for _, rs := range results {
+		if strings.Contains(strings.ToLower(rs.Detector), lower) ||
+			strings.Contains(strings.ToLower(filepath.Base(rs.WorkDir)), lower) ||
+			strings.Contains(strings.ToLower(rs.ContextPhase), lower) {
+			matches = append(matches, rs)
+		}
+	}
+	if len(matches) == 0 {
+		fmt.Println("未找到匹配 \"" + keyword + "\" 的任务")
+		return
+	}
+	if len(matches) == 1 {
+		fmt.Print(formatTaskDetail(matches[0]))
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString("匹配 \"" + keyword + "\": " + itoa(len(matches)) + " 个任务\n")
+	for _, rs := range matches {
+		sb.WriteString(itoa(rs.Index) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir) + "\n")
+	}
+	sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+	fmt.Print(sb.String())
+}
+
+func showFiltered(root, filter string) {
+	results, _ := loadLatestResults(root)
+	if results == nil {
+		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+		return
+	}
+
+	switch filter {
+	case "historical":
+		var hist, arch []ResearchStatus
+		for _, rs := range results {
+			switch rs.Bucket {
+			case "historical_failed":
+				hist = append(hist, rs)
+			case "archived_failed", "archived_stuck":
+				arch = append(arch, rs)
+			}
+		}
+		if len(hist) == 0 && len(arch) == 0 {
+			fmt.Println("无历史/归档异常")
+			return
+		}
+		var sb strings.Builder
+		if len(hist) > 0 {
+			sb.WriteString("历史异常 (1-7天): " + itoa(len(hist)) + " 个\n")
+			for _, rs := range hist {
+				sb.WriteString(itoa(rs.Index) + ". [FAILED] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir))
+				if rs.LastUpdate != "" {
+					sb.WriteString(" (" + rs.LastUpdate + ")")
+				}
+				sb.WriteString("\n")
+			}
+		}
+		if len(arch) > 0 {
+			if len(hist) > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString("归档异常 (>7天): " + itoa(len(arch)) + " 个\n")
+			for _, rs := range arch {
+				sb.WriteString(itoa(rs.Index) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir))
+				if rs.LastUpdate != "" {
+					sb.WriteString(" (" + rs.LastUpdate + ")")
+				}
+				sb.WriteString("\n")
+			}
+		}
+		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		fmt.Print(sb.String())
+
+	case "all":
+		var sb strings.Builder
+		sb.WriteString("全部任务: " + itoa(len(results)) + " 个\n\n")
+		for _, rs := range results {
+			tag := strings.ToUpper(rs.State)
+			if rs.Bucket == "archived_failed" {
+				tag = "ARCHIVED"
+			}
+			sb.WriteString(itoa(rs.Index) + ". [" + tag + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir) + "\n")
+		}
+		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		fmt.Print(sb.String())
+	}
+}
+
+func formatTaskDetail(rs ResearchStatus) string {
+	var sb strings.Builder
+	sb.WriteString("#" + itoa(rs.Index) + " [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector) + "\n\n")
+
+	sb.WriteString("Detector: " + rs.Detector + "\n")
+	sb.WriteString("WorkDir: " + rs.WorkDir + "\n")
+	if rs.ContextPhase != "" {
+		sb.WriteString("Phase: " + rs.ContextPhase + "\n")
+	}
+	if rs.LastUpdate != "" {
+		sb.WriteString("更新: " + rs.LastUpdate + "\n")
+	}
+	if rs.Bucket != "" {
+		sb.WriteString("分类: " + bucketLabel(rs.Bucket) + "\n")
+	}
+	sb.WriteString("Confidence: " + rs.Confidence + " | Score: " + itoa(rs.Score) + "\n")
+
+	if len(rs.KeyFiles) > 0 {
+		sb.WriteString("\n关键文件:\n")
+		for _, f := range rs.KeyFiles {
+			sb.WriteString("- " + f + "\n")
+		}
+	}
+
+	sb.WriteString("\n判断依据:\n")
+	for _, e := range rs.Evidence {
+		sb.WriteString("- " + e + "\n")
+	}
+
+	if len(rs.Warnings) > 0 {
+		sb.WriteString("\n警告:\n")
+		for _, w := range rs.Warnings {
+			sb.WriteString("- " + w + "\n")
+		}
+	}
+
+	if len(rs.NextActions) > 0 {
+		sb.WriteString("\n建议下一步:\n")
+		for _, a := range rs.NextActions {
+			sb.WriteString("- " + a + "\n")
+		}
+	}
+
+	return sb.String()
+}
+
+func bucketLabel(bucket string) string {
+	switch bucket {
+	case "active_failed":
+		return "近期失败 (<24h)"
+	case "historical_failed":
+		return "历史失败 (1-7天)"
+	case "archived_failed":
+		return "归档失败 (>7天)"
+	case "archived_stuck":
+		return "归档卡住 (>7天)"
+	default:
+		return bucket
+	}
 }
 
 func resolveMonitorRoot() string {
@@ -120,10 +357,7 @@ func scanProject(workDir string, maxDepth int, filterDetector string) []Research
 		}
 	}
 
-	// Depth 0: root itself
 	walkFn(workDir, 0)
-
-	// Depth 1..maxDepth: subdirectories
 	walkDirs(workDir, 1, maxDepth, walkFn)
 
 	return results
@@ -151,58 +385,72 @@ func walkDirs(dir string, currentDepth, maxDepth int, fn func(string, int)) {
 	}
 }
 
-const recentThresholdMins = 24 * 60 // 24h: recent vs historical
-
-// formatMobileSummary generates a compact mobile-friendly status.
 func formatMobileSummary(results []ResearchStatus, runDir string) string {
 	if len(results) == 0 {
 		return "科研监控: 未发现任何可识别的科研任务\n建议: 确认 CC_WORK_DIR 或 CC_RESEARCH_MONITOR_ROOT 指向科研项目目录\n"
 	}
 
-	// Count by state
-	counts := map[string]int{}
+	activeFailed := 0
+	historicalFailed := 0
+	archivedCount := 0
+	stateCounts := map[string]int{}
+
 	for _, rs := range results {
-		counts[rs.State]++
+		switch rs.Bucket {
+		case "active_failed":
+			activeFailed++
+		case "historical_failed":
+			historicalFailed++
+		case "archived_failed", "archived_stuck":
+			archivedCount++
+		default:
+			stateCounts[rs.State]++
+		}
 	}
+
+	failedDisplay := activeFailed + historicalFailed
 
 	var sb strings.Builder
 	sb.WriteString("科研监控: " + itoa(len(results)) + " 个任务\n")
 
-	// State count line
-	stateOrder := []string{"failed", "stuck", "running", "completed", "idle", "unknown"}
 	var parts []string
-	for _, s := range stateOrder {
-		if c := counts[s]; c > 0 {
-			parts = append(parts, strings.ToUpper(s)+" "+itoa(c))
-		}
+	if failedDisplay > 0 {
+		parts = append(parts, "FAILED "+itoa(failedDisplay))
+	}
+	if c := stateCounts["stuck"]; c > 0 {
+		parts = append(parts, "STUCK "+itoa(c))
+	}
+	if c := stateCounts["running"]; c > 0 {
+		parts = append(parts, "RUNNING "+itoa(c))
+	}
+	if c := stateCounts["completed"]; c > 0 {
+		parts = append(parts, "COMPLETED "+itoa(c))
+	}
+	if archivedCount > 0 {
+		parts = append(parts, "ARCHIVED "+itoa(archivedCount))
+	}
+	if c := stateCounts["idle"]; c > 0 {
+		parts = append(parts, "IDLE "+itoa(c))
 	}
 	if len(parts) > 0 {
 		sb.WriteString(strings.Join(parts, " | ") + "\n")
 	}
 
-	// Split into recent (<24h) and historical (>24h) failures/stuck
-	var recentAlerts []ResearchStatus
-	var histAlerts []ResearchStatus
+	// High-priority: active_failed + active stuck (not archived_stuck)
+	var alerts []ResearchStatus
 	for _, rs := range results {
-		if rs.State != "failed" && rs.State != "stuck" {
-			continue
-		}
-		if rs.LastUpdateMins >= 0 && rs.LastUpdateMins > recentThresholdMins {
-			histAlerts = append(histAlerts, rs)
-		} else {
-			recentAlerts = append(recentAlerts, rs)
+		if rs.Bucket == "active_failed" || (rs.State == "stuck" && rs.Bucket == "") {
+			alerts = append(alerts, rs)
 		}
 	}
-
-	// Recent high-priority alerts (max 3, one line each)
-	if len(recentAlerts) > 0 {
+	if len(alerts) > 0 {
 		sb.WriteString("\n高优先级异常:\n")
-		for i, rs := range recentAlerts {
+		for i, rs := range alerts {
 			if i >= 3 {
-				sb.WriteString("... 还有 " + itoa(len(recentAlerts)-3) + " 个近期异常\n")
+				sb.WriteString("... 还有 " + itoa(len(alerts)-3) + " 个\n")
 				break
 			}
-			line := itoa(i+1) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector)
+			line := itoa(rs.Index) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector)
 			if rs.ContextPhase != "" {
 				line += " — " + rs.ContextPhase
 			} else if len(rs.Evidence) > 0 {
@@ -214,19 +462,21 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 			}
 			sb.WriteString(line + "\n")
 		}
+	} else if stateCounts["running"] == 0 {
+		sb.WriteString("\n当前无活跃异常或运行中任务。\n")
 	}
 
-	// Historical failures — grouped by detector
-	if len(histAlerts) > 0 {
-		sb.WriteString("\n历史异常 (>24h): " + itoa(len(histAlerts)) + " 个\n")
-		groups := groupByDetector(histAlerts)
-		for _, g := range groups {
-			age := ""
-			if g.results[0].LastUpdate != "" {
-				age = " (" + g.results[0].LastUpdate + ")"
-			}
-			sb.WriteString("- " + detectorShortName(g.detector) + " x" + itoa(len(g.results)) + age + "\n")
+	// Historical + archived merged hint
+	if historicalFailed > 0 || archivedCount > 0 {
+		sb.WriteString("\n")
+		var hParts []string
+		if historicalFailed > 0 {
+			hParts = append(hParts, itoa(historicalFailed)+" 个历史")
 		}
+		if archivedCount > 0 {
+			hParts = append(hParts, itoa(archivedCount)+" 个归档")
+		}
+		sb.WriteString("历史/归档: " + strings.Join(hParts, "，") + "（/科研监控 历史）\n")
 	}
 
 	// Running tasks (max 2)
@@ -243,7 +493,7 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 				sb.WriteString("... 还有 " + itoa(len(running)-2) + " 个运行中\n")
 				break
 			}
-			line := "- " + detectorShortName(rs.Detector)
+			line := itoa(rs.Index) + ". " + detectorShortName(rs.Detector)
 			if rs.ContextPhase != "" {
 				line += " — " + rs.ContextPhase
 			} else if rs.LastUpdate != "" {
@@ -253,16 +503,13 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 		}
 	}
 
-	sb.WriteString("\n详情: runs/" + filepath.Base(runDir) + "/report.md\n")
+	sb.WriteString("\n查看详情: /科研监控 <序号>\n")
+	sb.WriteString("刷新: /科研监控 刷新\n")
+
 	return sb.String()
 }
 
 func detectorShortName(det string) string {
-	// "docker:haddock3" → "HADDOCK3"
-	// "gromacs" → "GROMACS"
-	// "python_pipeline" → "Python"
-	// "r_pipeline" → "R"
-	// "generic_cli" → "CLI"
 	if strings.HasPrefix(det, "docker:") {
 		return strings.ToUpper(strings.TrimPrefix(det, "docker:"))
 	}
@@ -313,7 +560,6 @@ func groupByDetector(results []ResearchStatus) []detectorGroup {
 	return groups
 }
 
-// writeDetailReport writes the full report.md to the run directory.
 func writeDetailReport(runDir string, results []ResearchStatus, workDir string) {
 	var sb strings.Builder
 	sb.WriteString("# 科研任务监控报告\n\n")
@@ -329,13 +575,18 @@ func writeDetailReport(runDir string, results []ResearchStatus, workDir string) 
 		sb.WriteString("- 扫描深度不足（当前: " + itoa(defaultScanDepth) + "，可通过 CC_RESEARCH_SCAN_DEPTH 调整）\n")
 	}
 
-	for i, rs := range results {
+	for _, rs := range results {
 		sb.WriteString("---\n\n")
-		sb.WriteString("## " + itoa(i+1) + ". " + rs.Detector + " — " + strings.ToUpper(rs.State) + "\n\n")
+		sb.WriteString("## #" + itoa(rs.Index) + " " + rs.Detector + " — " + strings.ToUpper(rs.State))
+		if rs.Bucket != "" {
+			sb.WriteString(" [" + rs.Bucket + "]")
+		}
+		sb.WriteString("\n\n")
 
 		sb.WriteString("| 属性 | 值 |\n|---|---|\n")
 		sb.WriteString("| Detector | " + rs.Detector + " |\n")
 		sb.WriteString("| State | " + rs.State + " |\n")
+		sb.WriteString("| Bucket | " + rs.Bucket + " |\n")
 		sb.WriteString("| Confidence | " + rs.Confidence + " |\n")
 		sb.WriteString("| Score | " + itoa(rs.Score) + " |\n")
 		sb.WriteString("| WorkDir | " + rs.WorkDir + " |\n")
@@ -380,7 +631,6 @@ func writeDetailReport(runDir string, results []ResearchStatus, workDir string) 
 
 	writeFile(filepath.Join(runDir, "report.md"), sb.String())
 
-	// Also write machine-readable status.json with all results
 	jsonData, _ := json.MarshalIndent(results, "", "  ")
 	writeFile(filepath.Join(runDir, "monitor-results.json"), string(jsonData))
 }

@@ -139,9 +139,21 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 }
 
 func parseDockerAgeMins(status string) int {
-	// "Exited (0) 2 days ago" → ~2880 min
-	// "Up 5 hours" → ~300 min
-	lower := strings.ToLower(status)
+	// "Exited (255) 4 days ago" → strip "(255)" → parse "4 days" → 5760 min
+	// "Up 5 hours" → 300 min
+	cleaned := status
+	for {
+		start := strings.Index(cleaned, "(")
+		if start < 0 {
+			break
+		}
+		end := strings.Index(cleaned[start:], ")")
+		if end < 0 {
+			break
+		}
+		cleaned = cleaned[:start] + cleaned[start+end+1:]
+	}
+	lower := strings.ToLower(cleaned)
 	n := 0
 	for _, c := range lower {
 		if c >= '0' && c <= '9' {

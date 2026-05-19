@@ -494,6 +494,56 @@ func TestInspectDockerContainer_Running(t *testing.T) {
 	}
 }
 
+func TestParseDockerAgeMins(t *testing.T) {
+	cases := []struct {
+		status string
+		want   int
+	}{
+		{"Up 5 hours", 300},
+		{"Up 30 minutes", 30},
+		{"Exited (0) 2 days ago", 2880},
+		{"Exited (255) 4 days ago", 5760},
+		{"Exited (137) 1 hours ago", 60},
+		{"Exited (1) 2 weeks ago", 20160},
+		{"Up 3 days", 4320},
+		{"Created", -1},
+	}
+	for _, tc := range cases {
+		got := parseDockerAgeMins(tc.status)
+		if got != tc.want {
+			t.Errorf("parseDockerAgeMins(%q) = %d, want %d", tc.status, got, tc.want)
+		}
+	}
+}
+
+func TestClassifyBucket(t *testing.T) {
+	cases := []struct {
+		name   string
+		state  string
+		mins   int
+		want   string
+	}{
+		{"running never archived", "running", 999999, ""},
+		{"active stuck", "stuck", 5000, ""},
+		{"archived stuck >7d", "stuck", 11520, "archived_stuck"},
+		{"completed not bucketed", "completed", 100, ""},
+		{"recent failed", "failed", 60, "active_failed"},
+		{"unknown time failed", "failed", -1, "active_failed"},
+		{"1-day failed", "failed", 2000, "historical_failed"},
+		{"6-day failed", "failed", 8640, "historical_failed"},
+		{"8-day failed", "failed", 11520, "archived_failed"},
+		{"30-day failed", "failed", 43200, "archived_failed"},
+	}
+	for _, tc := range cases {
+		rs := ResearchStatus{State: tc.state, LastUpdateMins: tc.mins}
+		got := classifyBucket(rs)
+		if got != tc.want {
+			t.Errorf("%s: classifyBucket(state=%q, mins=%d) = %q, want %q",
+				tc.name, tc.state, tc.mins, got, tc.want)
+		}
+	}
+}
+
 // --- statePriority sorting ---
 
 func TestStatePrioritySorting(t *testing.T) {

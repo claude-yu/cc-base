@@ -22,6 +22,8 @@ type ResearchStatus struct {
 	State          string   `json:"state"`      // running|completed|stuck|failed|idle|unknown
 	Confidence     string   `json:"confidence"` // high|medium|low
 	Score          int      `json:"score"`
+	Index          int      `json:"index"`                      // 1-based stable index (assigned post-sort)
+	Bucket         string   `json:"bucket,omitempty"`           // active_failed|historical_failed|archived_failed
 	WorkDir        string   `json:"work_dir"`
 	KeyFiles       []string `json:"key_files"`
 	LastUpdate     string   `json:"last_update,omitempty"`
