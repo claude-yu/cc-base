@@ -108,6 +108,7 @@ skills/cc-base/
 | `/修复 <问题描述>` | CC 直接修复 controller/cc-connect 报错（别名到 `/修复controller`） |
 | `/md状态检查 [MD工作目录]` | 只读扫描任意 MD/GROMACS 工作目录和 log tail |
 | `/项目` | 查看当前工作项目信息（Name、WorkDir、ProjectID） |
+| `/状态` | 查看系统状态（项目、活动任务、最近记录） |
 | `/切项目 <name\|path>` | 切换到指定项目，项目级 session 自动隔离 |
 | `/问codex <问题>` | 异步询问 Codex，完成后自动回传 |
 | `/codex结果 [RunId]` | 查看 Codex/CC ask 状态或结果 |

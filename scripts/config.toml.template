@@ -134,6 +134,12 @@ description = "切换到指定项目（/切项目 work-15）"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe switch {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+[[commands]]
+name = "状态"
+description = "查看系统状态（项目、活动任务、最近记录）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 # ═══════════════════════════════════════
 # Aliases
 # ═══════════════════════════════════════
