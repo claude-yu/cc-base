@@ -93,6 +93,19 @@ func trimToken(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// isNumeric returns true if s contains only ASCII digits.
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // readInput returns the first arg or stdin, trimming whitespace.
 func readInput(args []string) string {
 	if len(args) > 0 {

@@ -314,6 +314,10 @@ func cmdStatus(root string) {
 	fmt.Printf("Session: %s\n", session)
 	fmt.Println()
 
+	// ── Waiting queue ──
+	fmt.Println(describeQueue(root))
+	fmt.Println()
+
 	// ── Active runs ──
 	active := findActiveRuns(runsRoot)
 	if len(active) > 0 {

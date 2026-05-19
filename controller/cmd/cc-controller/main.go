@@ -94,8 +94,13 @@ func main() {
 		mustHaveArgs(args, 1, "usage: cc-controller run-codex <RunId>")
 		runCodex(root, args[0])
 	case "execute":
-		mustHaveArgs(args, 1, "usage: cc-controller execute RunId")
-		cmdExecute(root, args[0])
+		if len(args) == 0 || args[0] == "" {
+			cmdExecuteQueue(root)
+		} else if isNumeric(args[0]) {
+			cmdExecuteQueueIndex(root, args[0])
+		} else {
+			cmdExecute(root, args[0])
+		}
 	case "show":
 		runID := ""
 		if len(args) >= 1 {
@@ -107,10 +112,12 @@ func main() {
 		}
 		showRun(root, runID, "")
 	case "cancel":
-		if len(args) >= 1 && args[0] != "" {
-			cancelTask(root, args[0])
+		if len(args) == 0 || args[0] == "" {
+			cmdCancelSmart(root)
+		} else if isNumeric(args[0]) {
+			cmdCancelQueueIndex(root, args[0])
 		} else {
-			cancelLatest(root)
+			cancelTask(root, args[0])
 		}
 	case "project":
 		cmdProject(root)

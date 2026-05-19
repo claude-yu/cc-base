@@ -91,6 +91,7 @@ func cmdExecCC(root string, args []string) {
 			Type:  "confirming",
 		})
 		sendCallback(runDir, confirmMsg)
+		queueAdd(root, runID, workDir, text)
 		fmt.Printf("已生成执行确认 (Run ID: %s), 工作目录: %s\n", runID, workDir)
 		return
 	}

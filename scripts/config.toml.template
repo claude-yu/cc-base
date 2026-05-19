@@ -364,6 +364,10 @@ name = "切换到"
 command = "/切项目"
 
 [[aliases]]
+name = "查看"
+command = "/状态"
+
+[[aliases]]
 name = "切项目"
 command = "/切项目"
 
