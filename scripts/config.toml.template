@@ -256,6 +256,18 @@ description = "查看系统状态（同 /状态）"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+[[commands]]
+name = "监控"
+description = "扫描运行中任务，检测僵尸/卡住状态，自动清理"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe monitor"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "自检"
+description = "检查 cc-base 安装状态（工具、配置、环境变量）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\scripts\\check-install.ps1 -ControllerDir YOUR_PROJECT_ROOT\\controller"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 # ═══════════════════════════════════════
 # 快捷别名：发给cc/claude/claudecode → Claude Code
 #           发给codex/gpt/Codex → Codex
@@ -621,6 +633,26 @@ command = "/状态"
 [[aliases]]
 name = "状态"
 command = "/状态"
+
+# --- 监控/自检 ---
+[[aliases]]
+name = "monitor"
+command = "/监控"
+[[aliases]]
+name = "检查任务"
+command = "/监控"
+[[aliases]]
+name = "巡检"
+command = "/监控"
+[[aliases]]
+name = "自检"
+command = "/自检"
+[[aliases]]
+name = "检查安装"
+command = "/自检"
+[[aliases]]
+name = "selfcheck"
+command = "/自检"
 
 # ═══════════════════════════════════════
 # Claude Code 执行专线（微信 + QQ 双入口）

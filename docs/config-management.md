@@ -72,6 +72,17 @@ CC 和 Codex 角色的 backend 选择通过环境变量控制（`CC_BACKEND`、`
 
 实际生效的 backend 配置来源只有环境变量，详见 `docs/env-vars.md`。
 
+临时测试 backend 时，PowerShell 的 `$env:CC_CODEX_BACKEND="deepseek"` 只影响当前窗口和从该窗口启动的 `cc-connect`。测试后恢复 native Codex：
+
+```powershell
+Remove-Item Env:\CC_CODEX_BACKEND -ErrorAction SilentlyContinue
+Remove-Item Env:\CC_CODEX_API_BASE -ErrorAction SilentlyContinue
+Remove-Item Env:\CC_CODEX_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:\CC_CODEX_MODEL -ErrorAction SilentlyContinue
+```
+
+如果已经用该窗口重启过 `cc-connect`，清空变量后还需要再重启一次。完整说明见根目录 `指导.md`。
+
 ## Pipeline 架构
 
 ```
