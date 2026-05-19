@@ -368,6 +368,26 @@ name = "查看"
 command = "/状态"
 
 [[aliases]]
+name = "ok"
+command = "/执行"
+
+[[aliases]]
+name = "好"
+command = "/执行"
+
+[[aliases]]
+name = "可以"
+command = "/执行"
+
+[[aliases]]
+name = "确认"
+command = "/执行"
+
+[[aliases]]
+name = "执行"
+command = "/执行"
+
+[[aliases]]
 name = "切项目"
 command = "/切项目"
 

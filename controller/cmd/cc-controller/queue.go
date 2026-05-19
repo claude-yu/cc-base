@@ -110,7 +110,7 @@ func queuePrune(root string) int {
 	for _, e := range entries {
 		runDir := filepath.Join(root, "runs", e.RunID)
 		s := readStatusJSON(runDir)
-		if s.Status == "awaiting_confirmation" {
+		if s.Stage == "awaiting_confirmation" {
 			kept = append(kept, e)
 		} else {
 			pruned++
