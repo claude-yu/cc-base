@@ -37,12 +37,20 @@ func cmdResearchMonitor(root string, args []string) {
 		doFullScan(root, filterDetector)
 	case subcmd == "历史":
 		showFiltered(root, "historical")
+	case subcmd == "归档":
+		showFiltered(root, "archived")
 	case subcmd == "全部":
 		showFiltered(root, "all")
 	case isNumeric(subcmd):
 		showTaskDetail(root, atoiSafe(subcmd))
 	default:
-		showTaskByKeyword(root, subcmd)
+		if strings.HasSuffix(subcmd, " 全部") {
+			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 全部"), "all")
+		} else if strings.HasSuffix(subcmd, " 归档") {
+			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 归档"), "archived")
+		} else {
+			showTaskByKeyword(root, subcmd, "default")
+		}
 	}
 }
 
@@ -154,6 +162,51 @@ func classifyBucket(rs ResearchStatus) string {
 	return "archived_failed"
 }
 
+func absTimeShort(mins int) string {
+	if mins < 0 {
+		return ""
+	}
+	return time.Now().Add(-time.Duration(mins) * time.Minute).Format("01-02 15:04")
+}
+
+func absTimeFull(mins int) string {
+	if mins < 0 {
+		return ""
+	}
+	return time.Now().Add(-time.Duration(mins) * time.Minute).Format("2006-01-02 15:04:05")
+}
+
+func taskLine(rs ResearchStatus, timeMode string) string {
+	line := itoa(rs.Index) + ". [" + stateTag(rs) + "]"
+	switch timeMode {
+	case "short":
+		if t := absTimeShort(rs.LastUpdateMins); t != "" {
+			line += " " + t
+		}
+	case "full":
+		if t := absTimeFull(rs.LastUpdateMins); t != "" {
+			line += " " + t
+		}
+	}
+	line += " " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir)
+	return line
+}
+
+func isArchived(rs ResearchStatus) bool {
+	return rs.Bucket == "archived_failed" || rs.Bucket == "archived_stuck"
+}
+
+func scanTimeFromRunID(runID string) string {
+	if len(runID) < 15 {
+		return ""
+	}
+	t, err := time.Parse("20060102-150405", runID[:15])
+	if err != nil {
+		return ""
+	}
+	return t.Format("01-02 15:04")
+}
+
 func loadLatestResults(root string) ([]ResearchStatus, string) {
 	data, err := os.ReadFile(filepath.Join(root, "latest-monitor-run.txt"))
 	if err != nil {
@@ -189,8 +242,10 @@ func showTaskDetail(root string, index int) {
 	fmt.Println("未找到任务 #" + itoa(index) + "（共 " + itoa(len(results)) + " 个任务）")
 }
 
-func showTaskByKeyword(root, keyword string) {
-	results, _ := loadLatestResults(root)
+const keywordMaxDisplay = 10
+
+func showTaskByKeyword(root, keyword, mode string) {
+	results, runID := loadLatestResults(root)
 	if results == nil {
 		fmt.Println("尚无扫描结果，请先执行 /科研监控")
 		return
@@ -212,20 +267,82 @@ func showTaskByKeyword(root, keyword string) {
 		fmt.Print(formatTaskDetail(matches[0]))
 		return
 	}
-	var sb strings.Builder
-	sb.WriteString("匹配 \"" + keyword + "\": " + itoa(len(matches)) + " 个任务\n")
-	for _, rs := range matches {
-		sb.WriteString(itoa(rs.Index) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir) + "\n")
+
+	tsSuffix := ""
+	if ts := scanTimeFromRunID(runID); ts != "" {
+		tsSuffix = " (" + ts + " 扫描)"
 	}
+
+	var sb strings.Builder
+
+	switch mode {
+	case "archived":
+		var arch []ResearchStatus
+		for _, rs := range matches {
+			if isArchived(rs) {
+				arch = append(arch, rs)
+			}
+		}
+		if len(arch) == 0 {
+			fmt.Println("\"" + keyword + "\" 无归档任务")
+			return
+		}
+		sb.WriteString("\"" + keyword + "\" 归档: " + itoa(len(arch)) + " 个" + tsSuffix + "\n")
+		for _, rs := range arch {
+			sb.WriteString(taskLine(rs, "short") + "\n")
+		}
+
+	case "all":
+		sb.WriteString("匹配 \"" + keyword + "\": " + itoa(len(matches)) + " 个" + tsSuffix + "\n")
+		for _, rs := range matches {
+			sb.WriteString(taskLine(rs, "short") + "\n")
+		}
+
+	default:
+		var recent, arch []ResearchStatus
+		for _, rs := range matches {
+			if isArchived(rs) {
+				arch = append(arch, rs)
+			} else {
+				recent = append(recent, rs)
+			}
+		}
+		sb.WriteString("匹配 \"" + keyword + "\": " + itoa(len(matches)) + " 个任务" + tsSuffix + "\n")
+		if len(recent) > 0 {
+			display := recent
+			truncated := false
+			if len(recent) > keywordMaxDisplay {
+				display = recent[:keywordMaxDisplay]
+				truncated = true
+			}
+			for _, rs := range display {
+				sb.WriteString(taskLine(rs, "short") + "\n")
+			}
+			if truncated {
+				sb.WriteString("... 显示 " + itoa(len(display)) + "/" + itoa(len(recent)) + "。更多: /科研监控 " + keyword + " 全部\n")
+			}
+		}
+		if len(arch) > 0 {
+			sb.WriteString("\n归档 (>7天): " + itoa(len(arch)) + " 个（/科研监控 " + keyword + " 归档）\n")
+		}
+		if len(recent) == 0 && len(arch) > 0 {
+			sb.WriteString("近期无匹配，全部已归档\n")
+		}
+	}
+
 	sb.WriteString("\n用 /科研监控 <序号> 查看详情")
 	fmt.Print(sb.String())
 }
 
 func showFiltered(root, filter string) {
-	results, _ := loadLatestResults(root)
+	results, runID := loadLatestResults(root)
 	if results == nil {
 		fmt.Println("尚无扫描结果，请先执行 /科研监控")
 		return
+	}
+	tsSuffix := ""
+	if ts := scanTimeFromRunID(runID); ts != "" {
+		tsSuffix = " (" + ts + " 扫描)"
 	}
 
 	switch filter {
@@ -244,41 +361,55 @@ func showFiltered(root, filter string) {
 			return
 		}
 		var sb strings.Builder
+		if tsSuffix != "" {
+			sb.WriteString("数据" + tsSuffix + "\n\n")
+		}
 		if len(hist) > 0 {
 			sb.WriteString("历史异常 (1-7天): " + itoa(len(hist)) + " 个\n")
 			for _, rs := range hist {
-				sb.WriteString(itoa(rs.Index) + ". [FAILED] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir))
-				if rs.LastUpdate != "" {
-					sb.WriteString(" (" + rs.LastUpdate + ")")
-				}
-				sb.WriteString("\n")
+				sb.WriteString(taskLine(rs, "short") + "\n")
 			}
 		}
 		if len(arch) > 0 {
 			if len(hist) > 0 {
 				sb.WriteString("\n")
 			}
-			sb.WriteString("归档异常 (>7天): " + itoa(len(arch)) + " 个\n")
-			for _, rs := range arch {
-				sb.WriteString(itoa(rs.Index) + ". [" + strings.ToUpper(rs.State) + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir))
-				if rs.LastUpdate != "" {
-					sb.WriteString(" (" + rs.LastUpdate + ")")
-				}
-				sb.WriteString("\n")
+			sb.WriteString("归档 (>7天): " + itoa(len(arch)) + " 个（/科研监控 归档）\n")
+		}
+		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		fmt.Print(sb.String())
+
+	case "archived":
+		var arch []ResearchStatus
+		for _, rs := range results {
+			if isArchived(rs) {
+				arch = append(arch, rs)
 			}
+		}
+		if len(arch) == 0 {
+			fmt.Println("无归档任务")
+			return
+		}
+		var sb strings.Builder
+		sb.WriteString("归档任务 (>7天): " + itoa(len(arch)) + " 个" + tsSuffix + "\n")
+		display := arch
+		if len(arch) > keywordMaxDisplay {
+			display = arch[:keywordMaxDisplay]
+		}
+		for _, rs := range display {
+			sb.WriteString(taskLine(rs, "short") + "\n")
+		}
+		if len(arch) > keywordMaxDisplay {
+			sb.WriteString("... 显示 " + itoa(keywordMaxDisplay) + "/" + itoa(len(arch)) + "。更多: /科研监控 全部\n")
 		}
 		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
 		fmt.Print(sb.String())
 
 	case "all":
 		var sb strings.Builder
-		sb.WriteString("全部任务: " + itoa(len(results)) + " 个\n\n")
+		sb.WriteString("全部任务: " + itoa(len(results)) + " 个" + tsSuffix + "\n\n")
 		for _, rs := range results {
-			tag := strings.ToUpper(rs.State)
-			if rs.Bucket == "archived_failed" {
-				tag = "ARCHIVED"
-			}
-			sb.WriteString(itoa(rs.Index) + ". [" + tag + "] " + detectorShortName(rs.Detector) + " — " + filepath.Base(rs.WorkDir) + "\n")
+			sb.WriteString(taskLine(rs, "short") + "\n")
 		}
 		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
 		fmt.Print(sb.String())
@@ -294,8 +425,8 @@ func formatTaskDetail(rs ResearchStatus) string {
 	if rs.ContextPhase != "" {
 		sb.WriteString("Phase: " + rs.ContextPhase + "\n")
 	}
-	if rs.LastUpdate != "" {
-		sb.WriteString("更新: " + rs.LastUpdate + "\n")
+	if rs.LastUpdateMins >= 0 {
+		sb.WriteString("最近更新: " + absTimeFull(rs.LastUpdateMins) + "\n")
 	}
 	if rs.Bucket != "" {
 		sb.WriteString("分类: " + bucketLabel(rs.Bucket) + "\n")
@@ -329,6 +460,19 @@ func formatTaskDetail(rs ResearchStatus) string {
 	}
 
 	return sb.String()
+}
+
+func stateTag(rs ResearchStatus) string {
+	switch rs.Bucket {
+	case "archived_failed":
+		return "ARCHIVED"
+	case "archived_stuck":
+		return "STUCK/归档"
+	case "historical_failed":
+		return "FAILED/历史"
+	default:
+		return strings.ToUpper(rs.State)
+	}
 }
 
 func bucketLabel(bucket string) string {
@@ -446,7 +590,7 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 	failedDisplay := activeFailed + historicalFailed
 
 	var sb strings.Builder
-	sb.WriteString("科研监控: " + itoa(len(results)) + " 个任务\n")
+	sb.WriteString("科研监控: " + itoa(len(results)) + " 个任务 (" + time.Now().Format("01-02 15:04") + ")\n")
 
 	var parts []string
 	if failedDisplay > 0 {
