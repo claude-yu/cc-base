@@ -70,8 +70,17 @@ func cmdExecCC(root string, args []string) {
 		// execute_request: use CC_EXECUTE_WORK_DIR (safe sandbox).
 		// Never inherit CC_WORK_DIR (research project dir).
 		workDir := os.Getenv("CC_EXECUTE_WORK_DIR")
-		if workDir == "" {
-			workDir = "YOUR_PROJECT_ROOT\\test"
+		if workDir == "" || strings.Contains(workDir, "YOUR_PROJECT_ROOT") {
+			fmt.Fprintln(os.Stderr, "错误: CC_EXECUTE_WORK_DIR 未正确配置，请设置为真实目录，例如 E:\\ai\\selfwork_ytl\\test")
+			os.WriteFile(filepath.Join(runDir, "summary.md"), []byte("CC_EXECUTE_WORK_DIR 未正确配置，请设置为真实目录，例如 E:\\ai\\selfwork_ytl\\test"), 0644)
+			updateStatusJSON(runDir, "failed", "config_error", 0)
+			return
+		}
+		if _, err := os.Stat(workDir); err != nil {
+			fmt.Fprintf(os.Stderr, "错误: CC_EXECUTE_WORK_DIR 目录不存在: %s\n", workDir)
+			os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(fmt.Sprintf("CC_EXECUTE_WORK_DIR 目录不存在: %s", workDir)), 0644)
+			updateStatusJSON(runDir, "failed", "config_error", 0)
+			return
 		}
 		writeFile(filepath.Join(runDir, "runner.workdir"), workDir)
 		confirmMsg := fmt.Sprintf(`[执行确认] (RunId: %s)
