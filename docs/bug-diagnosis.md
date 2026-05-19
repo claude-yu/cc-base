@@ -35,17 +35,19 @@
 | 症状 | 根因 | 修复 |
 |------|------|------|
 | 命令"不是 cc-connect 命令" | 源 config 有但部署 config 没有 | `Copy-Item` 同步 + 重启 |
-| 中文回复乱码 | `GetACP()=936` vs `ConsoleOutputCP=65001` | 脚本加 `OutputEncoding=936` |
+| 中文回复乱码 | cc-connect 用 GBK 解码 stdout | 脚本顶部加 UTF-8 三行（详见 `rules/encoding.md`），**不要用 936** |
 | 命令无回复/卡住 | `Start-Process -RedirectStandardOutput` handle 继承 | 用 runner 脚本模式 |
 | "administrator permission required" | `admin_from` 不在 `[[projects]]` 级别 | 移到 projects 级 |
 | Claude CLI 丢中文 | `-p $ChineseText` 编码丢失 | 用 stdin 管道传入 |
 | Codex CLI 连接失败 | 代理协议不匹配 | 分别设 HTTP/SOCKS5h |
 | `$ArgsRest` null crash | `{{args}}` 为空时 `.ToString()` 崩溃 | null-guard 检查 |
 | PowerShell 解析错误 | 任务文本含 `{}();$\|><"` | 替换为安全文本 |
+| API backend 报 "key not set" | `CC_CODEX_API_KEY` 未设置 | 设环境变量或切回 native：`Remove-Item Env:\CC_CODEX_BACKEND` |
+| Waiting queue 不消费 | 队列中 stage 不匹配 | 运行 `/监控` 自动清理 zombie 条目 |
 
 ## 踩坑实录
 
-### GBK 编码链路（2026-05-18）
+### GBK 编码链路（2026-05-18，已解决）
 
 调试过程：先试了 `[Console]::OpenStandardOutput()` 写原始 UTF-8 字节 → 还是乱码。再试了去掉所有 UTF-8 编码覆盖 → 默认也是 UTF-8，还是乱码。最终发现 cc-connect Go 二进制内含 `gbk`、`GetACP`、`936` 字符串 → 确认是 Go 端用 GBK 解码。
 
@@ -53,6 +55,8 @@
 - `GetACP()=936` (ANSI) — cc-connect 用这个
 - `GetOEMCP()=936` (OEM)
 - `GetConsoleOutputCP()=65001` (Console) — PowerShell 用这个
+
+**最终修复**：所有 controller 脚本统一 UTF-8 输出（详见 `rules/encoding.md`），**不再使用 936/GBK**。Go 二进制（cc-controller.exe）天然 UTF-8，无需处理。
 
 ### Handle 继承问题（2026-05-18）
 

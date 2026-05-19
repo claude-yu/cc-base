@@ -48,7 +48,7 @@ skills/cc-base/
 │       └── evolve-instincts.ps1      # /进化习惯
 ├── controller/                       # ★ Go 控制器（session-aware cc/codex 权威实现）
 │   ├── go.mod
-│   └── cmd/cc-controller/            # 8 文件模块化结构
+│   └── cmd/cc-controller/            # 15 文件（13 源码 + 2 测试）
 │       ├── main.go                   # 入口、类型、main() switch、usage()
 │       ├── common.go                 # 共享辅助函数
 │       ├── ask.go                    # genRunID、stateless ask
@@ -59,7 +59,11 @@ skills/cc-base/
 │       ├── project.go                # 多项目切换（active_project.json、session ID）
 │       ├── status.go                 # 状态/事件/transcript + show
 │       ├── classify.go               # 模式分类器（advice/readonly/execute_request）
-│       └── main_test.go              # 单元测试（classifier、readInput、findLatestRun）
+│       ├── backend.go                # Backend 选择器（native/openai/deepseek/glm）+ API client
+│       ├── queue.go                  # Waiting queue（CRUD + prune + 智能分发）
+│       ├── monitor.go                # Stuck/zombie task 监控 + 自动清理
+│       ├── main_test.go              # 单元测试（classifier、readInput、findLatestRun）
+│       └── classify_test.go          # 分类器测试
 ├── rules/                            # 操作规则
 │   ├── encoding.md                   # GBK/UTF-8 编码规则
 │   ├── proxy.md                      # 代理隔离规则
@@ -68,12 +72,14 @@ skills/cc-base/
 │   ├── powershell.md                 # 特殊字符/null-guard
 │   └── new-script-checklist.md       # 新脚本检查清单
 └── docs/                             # 经验总结
+    ├── backend-abstraction-plan.md    # ★ Backend 三层抽象架构设计
     ├── bug-diagnosis.md              # Bug 诊断速查 + 踩坑实录
     ├── codex-convergence.md          # Codex 审查收敛策略 + Grill-Me
     ├── config-management.md          # Config 双文件 + Pipeline 架构
     ├── env-vars.md                   # ★ 环境变量配置参考
     ├── instinct-learning.md          # ★ Chat-Instinct 学习系统文档
-    ├── research-memory-plan.md       # ★ Research-Memory bridge 冻结计划
+    ├── mobile-agent-next-plan.md     # 移动端 Agent 改进计划 + 踩坑实录
+    ├── research-memory-plan.md       # Research-Memory bridge（冻结规格，未实现）
     ├── wechat-setup.md               # ★ WeChat 企业号接入引导
     └── qq-setup.md                   # ★ QQ NapCat Docker 接入引导
 ```
@@ -92,8 +98,9 @@ skills/cc-base/
 | Codex 审查策略 | `docs/codex-convergence.md` |
 | Config 管理/Pipeline 架构 | `docs/config-management.md` |
 | 环境变量配置 | `docs/env-vars.md` |
+| Backend 抽象架构 | `docs/backend-abstraction-plan.md` |
 | Chat-Instinct 学习系统 | `docs/instinct-learning.md` |
-| Research-Memory bridge | `docs/research-memory-plan.md` |
+| Research-Memory bridge | `docs/research-memory-plan.md`（冻结规格，未实现） |
 | WeChat 接入 | `docs/wechat-setup.md` |
 | QQ NapCat 接入 | `docs/qq-setup.md` |
 | 所有脚本源码 | `scripts/bin/*.ps1` |
@@ -118,6 +125,8 @@ skills/cc-base/
 | `/质询计划` | Grill-Me 模式质询最近计划 |
 | `/执行 <RunId>` | 执行已确认的任务（完整工具权限） |
 | `/取消任务 [RunId]` | 取消正在运行的任务 |
+| `/监控` | 检查 stuck/zombie 任务，自动清理并通知 |
+| `/自检` | 12 项安装自检（Claude/Codex/cc-connect/Go/Docker/config 等） |
 | `/学习状态` | 查看 chat-instinct 观察记录和习惯统计 |
 | `/进化习惯` | 分析观察记录，生成习惯进化候选 |
 | `/自动回传 开/关` | 开关计划审查完成后是否自动推回聊天窗口 |

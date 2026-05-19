@@ -1,6 +1,6 @@
 # QQ (NapCat) 接入引导
 
-通过 NapCat + Docker 连接 QQ，实现手机远程操控 Codex agent。
+通过 NapCat + Docker 连接 QQ，实现手机远程操控 CC + Codex agent。
 
 ## 前置条件
 
@@ -148,11 +148,15 @@ Start-Sleep -Seconds 10  # 等待 NapCat WebSocket 就绪
 | OPENAI_API_KEY not set | 原生 Codex agent 需要 API key | 设环境变量，或改用 cc-controller 路径（见下方说明） |
 | NapCat 容器重启后需重新登录 | QQ session 过期 | 重新扫码，或配置 NapCat 的持久化 session 目录 |
 
+## 推荐架构：QQ 并入 cc project
+
+v2.5.0 起，QQ 平台已从独立 `codex` project 移入 `cc` project，与微信共享全部 `[[commands]]` 路由。这意味着 QQ 可直接使用 `/cc`、`/问codex`、`/状态`、`/查看`、`/监控`、`/自检` 等全部命令。
+
+如仍需 QQ 独立 codex agent（不走 cc-controller），可将 QQ 平台配到单独 `codex` project，但需额外设置 `OPENAI_API_KEY`。
+
 ## 两种 Codex 接入路径
 
 | 路径 | 认证方式 | 适用 |
 |------|----------|------|
-| `/问codex` → cc-controller → codex CLI | ChatGPT OAuth（`~/.codex/auth.json`） | 微信命令路由 |
-| cc-connect 原生 codex agent | OpenAI API key（`${OPENAI_API_KEY}`） | QQ 直连 agent |
-
-如果不想单独设 API key，可以让 QQ 也走 cc-controller 命令路由（配置 QQ 平台到 cc project 下，而不是 codex project）。
+| `/问codex` → cc-controller → codex CLI | ChatGPT OAuth（`~/.codex/auth.json`） | cc project 命令路由（推荐） |
+| cc-connect 原生 codex agent | OpenAI API key（`${OPENAI_API_KEY}`） | 独立 codex project |

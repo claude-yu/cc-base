@@ -62,4 +62,4 @@
 7. Instinct 候选
 8. Skill 候选
 
-**当前限制**：不支持 `-RunId` 指定特定 run（v2.2.1 候选）。
+**当前限制**：不支持 `-RunId` 指定特定 run（Go 实现中 `show` 已支持按 kind 过滤，PS 质询脚本尚未对接）。

@@ -160,10 +160,12 @@ Preset F: Feishu output callback + native/API role backends (future)
 
 CC role 和 Codex role 使用对称环境变量。
 
-CC role：
+> **实现状态**：Codex role 的 `CC_CODEX_*` 变量已在 `backend.go` 中实现。CC role 的 `CC_CC_*` 是此计划的**未实现命名方案**，实际代码使用 `CC_BACKEND=native_claude`（见 `docs/env-vars.md`）。以下保留原始设计供参考。
+
+CC role（计划命名，未实现）：
 
 ```text
-CC_CC_BACKEND=native_claude
+CC_CC_BACKEND=native_claude        # 实际代码用 CC_BACKEND
 CC_CC_BACKEND=anthropic_api
 CC_CC_BACKEND=openai
 CC_CC_BACKEND=deepseek
@@ -174,7 +176,7 @@ CC_CC_API_KEY=...
 CC_CC_MODEL=...
 ```
 
-Codex role：
+Codex role（已实现）：
 
 ```text
 CC_CODEX_BACKEND=native_codex
@@ -187,7 +189,7 @@ CC_CODEX_API_KEY=...
 CC_CODEX_MODEL=...
 ```
 
-第一轮只要求 `CC_CC_BACKEND=native_claude` 真正可执行。其它 CC role API backend 只允许配置，并在运行时明确提示未实现。
+第一轮只要求 `CC_BACKEND=native_claude`（CC role）和 `CC_CODEX_BACKEND=native_codex`（Codex role）真正可执行。API backend 只允许配置 Codex role，CC role API backend 运行时会明确提示未实现。
 
 ## Feishu Integration Plan
 

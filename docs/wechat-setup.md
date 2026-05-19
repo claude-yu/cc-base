@@ -73,6 +73,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File start.ps1 -CleanSessions
 | 问题 | 解决 |
 |------|------|
 | 发消息无回复 | 检查 `admin_from` 是否在 `[[projects]]` 级别 |
-| 乱码 | 脚本需要 `[Console]::OutputEncoding = GetEncoding(936)`，详见 `rules/encoding.md` |
+| 乱码 | 脚本顶部加 UTF-8 三行（**不要用 936**），详见 `rules/encoding.md` |
 | Token 过期 | 重新扫码注册，更新 config.toml 中的 token |
 | 代理问题 | Claude 用 HTTP、Codex 用 SOCKS5h，详见 `rules/proxy.md` |

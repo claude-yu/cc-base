@@ -27,7 +27,7 @@ Go ask pipelines: generate RunId → create `controller/runs/<RunId>/` → exec.
 
 Replaces PowerShell `submit-cc-ask.ps1` / `cc-ask-runner.ps1` and `submit-codex-ask.ps1` / `codex-ask-runner.ps1` hot paths.
 
-Source: `controller/cmd/cc-controller/` (8 `.go` files + 1 test file), built with:
+Source: `controller/cmd/cc-controller/` (13 `.go` files + 2 test files), built with:
 ```powershell
 go build -C "YOUR_PROJECT_ROOT\controller" -o "cc-controller.exe" "./cmd/cc-controller/"
 ```
@@ -38,11 +38,18 @@ File organization (all `package main` in `controller/cmd/cc-controller/`):
 | `main.go` | Package, imports, types, main() switch, usage() |
 | `common.go` | Shared helpers (mustHaveArgs, resolveControllerRoot, sendCallback, writeFile, writeError, trimToken, readInput) |
 | `ask.go` | genRunID, cmdAsk (stateless ask entry point) |
-| `exec.go` | cmdExecCC (session-aware exec entry), parseExecFlags, session management (loadOrCreateSession, buildSessionContext) |
+| `exec.go` | cmdExecCC (session-aware exec entry), parseExecFlags, session management, execute confirmation + sandbox validation |
 | `cc.go` | runCC, resolveClaudeCmd, resolveWorkDir (with heartbeat goroutine) |
 | `codex.go` | runCodex, cleanCodexOutput, resolveCodexCmd, setCodexProxy (with heartbeat goroutine) |
-| `cancel.go` | cancelTask, cancelLatest, isProcessRunning |
+| `cancel.go` | cancelTask, cancelLatest, isProcessRunning + smart cancel (running→waiting priority) |
+| `project.go` | cmdProject, cmdSwitchProject, active_project.json management |
 | `status.go` | Status/event/transcript helpers (writeStatusJSON, updateStatusJSON, setExitCode, appendEvent, appendTranscript, writeJSON) + showRun, findLatestRunByKind, findLatestRun, runStatus |
+| `classify.go` | Mode classifier (advice/readonly/execute_request) with science-term guard |
+| `backend.go` | Backend selector (CC_CODEX_BACKEND env var), runAPICodex (OpenAI-compatible HTTP client), loud-fail on missing key |
+| `queue.go` | Waiting queue CRUD (waiting_queue.json), queuePrune, smart dispatch (0→reject/1→execute/N→ask) |
+| `monitor.go` | Stuck/zombie task watchdog, heartbeat threshold escalation (3/5/10min), auto-cleanup + callback |
+| `main_test.go` | Unit tests (classifier, readInput, findLatestRun, sidecar filtering) |
+| `classify_test.go` | Classifier test cases |
 
 Subcommands:
 - `ask-cc <text>` — stateless: generate RunId, write incoming question, detach `run-cc` background process, print RunId
@@ -52,6 +59,9 @@ Subcommands:
 - `run-codex <RunId>` — call `codex exec`, clean output noise, write results, send callback
 - `show [RunId|kind]` — display run results (omit RunId = latest; pass non-RunId string = filter by kind, e.g. "cc-session")
 - `cancel [RunId]` — cancel running task (omit = cancel latest active task by PID scan)
+- `execute [N|RunId]` — execute confirmed task from waiting queue (omit = smart dispatch)
+- `monitor` — scan for stuck/zombie tasks, auto-cleanup, send callback notifications
+- `status` — system status dashboard (project info, active tasks, recent runs)
 
 Key advantages over PowerShell:
 - No BOM/encoding issues (Go writes UTF-8 natively)
@@ -221,6 +231,8 @@ controller/
 | `cc-controller.exe` | `/问codex <question>` | Async Codex Q&A (Go) |
 | `cc-controller.exe` | `/codex结果 [RunId]` | Codex ask status/result (Go) |
 | `cc-controller.exe` | `/取消任务 [RunId]` | Cancel running task by RunId (omit = cancel latest) (Go) |
+| `cc-controller.exe` | `/监控` | Stuck/zombie task monitor + auto-cleanup (Go) |
+| `check-install.ps1` | `/自检` | 12-item installation self-check (PS) |
 | `submit-plan-review.ps1` | `/计划审查 <task>` | CC plan + Codex review (async, PS) |
 | `show-plan-review.ps1` | `/查看审查 [RunId]` | Plan review status/result (PS) |
 | `collect-md-status.ps1` | `/md状态检查 [path]` | Read-only MD workspace scan (PS) |

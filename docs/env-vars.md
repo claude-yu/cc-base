@@ -13,6 +13,8 @@ cc-base 通过环境变量配置，所有脚本通用。
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `CC_MODEL` | `claude-opus-4-6` | Controller 调 Claude CLI 的模型（`start.ps1` 默认设置，不影响 CLI 全局默认） |
+| `CC_CONTROLLER_DIR` | 自动检测 | controller 根目录（覆盖 auto-detect） |
+| `CC_EXECUTE_WORK_DIR` | `$CC_WORK_DIR` | 执行模式沙盒目录（`execute_request` 在此目录运行，隔离科研数据） |
 | `CC_CODEX_WORK_DIR` | `$CC_WORK_DIR` | Codex agent 工作目录 |
 | `CODEX_PROXY` | （不设置） | Codex CLI 代理（`socks5h://host:port`） |
 | `CLAUDE_PROXY` | （不设置） | Claude CLI 代理（`http://host:port`） |

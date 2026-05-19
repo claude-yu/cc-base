@@ -18,6 +18,8 @@
 | **异步问答** | `/问codex <问题>` | 异步询问 Codex，完成后自动推回聊天 |
 | **自动修复** | `/修复 <问题>` | CC 自动修复 controller/cc-connect 基础设施报错 |
 | **系统状态** | `/状态` | 系统状态仪表盘（项目、活动任务、卡住检测） |
+| **任务监控** | `/监控` | Stuck/zombie task 检测 + 自动清理 + callback 通知 |
+| **安装自检** | `/自检` | 12 项安装检查（CLI/config/命令/环境变量） |
 | **状态监控** | `/md状态检查 [目录]` | 只读扫描 GROMACS MD 工作目录和 log tail |
 | **任务执行** | `/执行 <RunId>` | 二次确认后执行任务（完整工具权限） |
 | **任务取消** | `/取消任务 [RunId]` | 取消运行中的任务 |
@@ -92,20 +94,25 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 
 ### Go 控制器结构
 
-`cc-controller.exe`（10 文件模块化，`controller/cmd/cc-controller/`）：
+`cc-controller.exe`（15 文件，`controller/cmd/cc-controller/`）：
 
 | 文件 | 职责 |
 |------|------|
 | `main.go` | 入口、路由 |
 | `common.go` | 共享工具函数 |
-| `exec.go` | Session 对话管理 |
+| `ask.go` | 无状态 ask 入口 |
+| `exec.go` | Session 对话管理 + 执行确认 |
 | `cc.go` | Claude Code 执行器 + 心跳 |
 | `codex.go` | Codex 执行器 |
-| `project.go` | 多项目切换 |
-| `classify.go` | 模式分类器 |
 | `cancel.go` | 任务取消 |
+| `project.go` | 多项目切换 |
 | `status.go` | 状态持久化 + 查询 |
-| `ask.go` | 无状态 ask 入口 |
+| `classify.go` | 模式分类器 |
+| `backend.go` | Backend 选择器（native/API）+ API client |
+| `queue.go` | Waiting queue（入队/分发/清理） |
+| `monitor.go` | Stuck/zombie task 监控 + 自动清理 |
+| `main_test.go` | 单元测试 |
+| `classify_test.go` | 分类器测试 |
 
 ---
 
@@ -147,6 +154,8 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 | `/学习状态` | — | 查看学习统计 | PS |
 | `/进化习惯` | 进化 | 生成习惯进化候选 | PS |
 | `/自动回传 开/关` | 回传 | 开关自动回传 | PS |
+| `/监控` | monitor、检查任务 | 检测 stuck/zombie 任务 | Go |
+| `/自检` | 检查安装 | 12 项安装自检 | PS |
 
 ---
 
@@ -214,7 +223,7 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 
 | 问题 | 原因 | 解决办法 |
 |------|------|---------|
-| 中文乱码 | GBK/UTF-8 编码链 | 脚本顶部设置 `[Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(936)` |
+| 中文乱码 | GBK/UTF-8 编码链 | 脚本顶部设 UTF-8 三行（详见 `rules/encoding.md`），**不要用 936** |
 | 命令卡住无回复 | 后台进程挂起 | 使用 `/取消任务` 终止，或用 `/修复` 诊断 |
 | `/修复` 无法修复 | 复杂底层问题 | 检查 cc-connect config 和 logs |
 | Codex 长时间无回传 | Codex CLI 断连 | 检查 `CODEX_PROXY` 代理设置 |

@@ -95,11 +95,16 @@ cc-connect（Go 二进制 + Node.js 安装器）
     │     └─→ 后台: call-cc-readonly.ps1 → call-codex-review.ps1
     │           └─→ 写 verdict.md + summary.md
     │
+    ├─→ /cc → cc-controller.exe exec-cc（session-aware 对话）
+    ├─→ /问codex → cc-controller.exe ask-codex（异步问答）
+    ├─→ /执行 → cc-controller.exe execute（waiting queue 分发）
+    ├─→ /取消任务 → cc-controller.exe cancel（智能取消）
+    ├─→ /监控 → cc-controller.exe monitor（stuck/zombie 检测）
     ├─→ /修复controller → fix-controller.ps1
     ├─→ /批准执行 → execute-approved.ps1（需 Codex APPROVE）
     ├─→ /人工批准执行 → execute-manual-approved.ps1（需 manual-approval.md）
     ├─→ /md状态检查 → collect-md-status.ps1
-    └─→ 发给cc/发给codex → 直接转发到 CC/Codex agent
+    └─→ /自检 → check-install.ps1（12 项安装检查）
 ```
 
 ## 审查结论
