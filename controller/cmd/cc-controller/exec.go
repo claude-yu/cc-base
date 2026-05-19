@@ -12,7 +12,7 @@ import (
 )
 
 func cmdExecCC(root string, args []string) {
-	text, sessionID, mode, auto := parseExecFlags(args)
+	text, sessionID, mode, replyProject, auto := parseExecFlags(args)
 	text = strings.TrimSpace(text)
 	if text == "" || strings.HasPrefix(text, "--") {
 		fmt.Fprintln(os.Stderr, `用法：
@@ -35,6 +35,10 @@ func cmdExecCC(root string, args []string) {
 	runDir := filepath.Join(root, "runs", runID)
 	os.MkdirAll(runDir, 0755)
 	os.WriteFile(filepath.Join(runDir, "incoming-message.txt"), []byte(text), 0644)
+
+	if replyProject != "" {
+		writeFile(filepath.Join(runDir, "runner.reply-project"), replyProject)
+	}
 
 	sessionDir := filepath.Join(root, "sessions", sessionID)
 	os.MkdirAll(sessionDir, 0755)
@@ -232,13 +236,13 @@ func buildExecuteSummary(workDir string) string {
 	return sb.String()
 }
 
-func parseExecFlags(args []string) (text, session, mode string, auto bool) {
+func parseExecFlags(args []string) (text, session, mode, replyProject string, auto bool) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--text":
 			i++
 			if i >= len(args) {
-				return "", session, mode, auto
+				return "", session, mode, replyProject, auto
 			}
 			parts := []string{args[i]}
 			i++
@@ -259,6 +263,11 @@ func parseExecFlags(args []string) (text, session, mode string, auto bool) {
 			i++
 			if i < len(args) {
 				mode = args[i]
+			}
+		case "--reply-project":
+			i++
+			if i < len(args) {
+				replyProject = args[i]
 			}
 		}
 	}

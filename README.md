@@ -66,6 +66,22 @@ cc-connect（Go 多平台聊天网关）
         └── PowerShell 单步：/修复controller /md状态检查 /学习状态
 ```
 
+### Architecture: Platform / Role / Backend
+
+cc-base 采用三层抽象模型，将消息来源、Agent 角色和实际执行引擎解耦：
+
+- **Platform（平台）**：消息从哪里来。WeChat、QQ、Feishu（未来）。不同平台共享同一套命令语义。
+- **Role（角色）**：用户想调用哪类 Agent。CC = 主执行者（对话/文件/任务），Codex = 第二意见/审查者。
+- **Backend（后端）**：角色的实际实现。native CLI（Claude Code、Codex CLI）或第三方 API（OpenAI/DeepSeek/GLM）。
+
+用户命令不暴露 backend 选择。`发给codex` 始终表示"让 Codex 角色处理"，无论后端是 native Codex CLI 还是 DeepSeek API。Backend 通过环境变量选择（如 `CC_CODEX_BACKEND=deepseek`），默认使用 native CLI。
+
+```
+Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
+```
+
+本机用户保持 native Claude + native Codex 最快路径。没有 Codex CLI 的用户可通过 API backend 替代 Codex 角色。详见 `docs/env-vars.md`。
+
 ### 三种异步管道
 
 | 模式 | 入口 | 后台执行 | 回传 |
@@ -103,8 +119,9 @@ cc-connect（Go 多平台聊天网关）
 | cc-connect | 1.3.2+ | `npm install -g cc-connect` |
 | Claude Code CLI | latest | `npm install -g @anthropic-ai/claude-code` |
 | Codex CLI | optional | `npm install -g @openai/codex` |
+| Docker Desktop | QQ 接入时必需 | [docker.com](https://www.docker.com/) |
 | 微信企业号 bot | 必需 | 企业号后台申请 |
-| NapCat QQ | optional | [NapCat](https://napcat.napneko.icu/) |
+| NapCat QQ | optional | Docker: `mlikiowa/napneko-docker`，[文档](https://napcat.napneko.icu/) |
 
 ---
 
@@ -202,6 +219,8 @@ cc-connect（Go 多平台聊天网关）
 | `/修复` 无法修复 | 复杂底层问题 | 检查 cc-connect config 和 logs |
 | Codex 长时间无回传 | Codex CLI 断连 | 检查 `CODEX_PROXY` 代理设置 |
 | 分类器误判 | 关键词匹配边界 | 用 `/cc` 会二次确认执行型任务，误判不自动执行 |
+| QQ ws connect failed | NapCat 未就绪 | NapCat 启动需 1-3 分钟，等待后重启 cc-connect。详见 [QQ 接入](docs/qq-setup.md) |
+| QQ Offline | QQ 未登录 | 打开 `http://127.0.0.1:6099` 扫码登录，详见 [QQ 接入](docs/qq-setup.md) |
 
 ---
 
@@ -212,7 +231,7 @@ cc-connect（Go 多平台聊天网关）
 | [SKILL.md](SKILL.md) | 完整 Skill 参考（文件结构、部署步骤、环境变量） |
 | [指导.md](指导.md) | 聊天窗口使用指南 |
 | [rules/](rules/) | 编码规则（编码/代理/进程/安全/PowerShell） |
-| [docs/](docs/) | 深度文档（Config管理/学习系统/WeChat接入/Codex策略） |
+| [docs/](docs/) | 深度文档（Config管理/学习系统/WeChat接入/QQ接入/Codex策略） |
 
 ---
 

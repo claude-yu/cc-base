@@ -70,6 +70,9 @@ func runCC(root, runID, sessionID, mode string) {
 	} else {
 		claudeArgs = []string{"-p", "--system-prompt", modePrompt, "--output-format", "text", "--no-session-persistence"}
 	}
+	if m := os.Getenv("CC_MODEL"); m != "" {
+		claudeArgs = append(claudeArgs, "--model", m)
+	}
 	cmd := exec.Command(claudeCmd, claudeArgs...)
 	cmd.Dir = workDir
 	cmd.Stdin = bytes.NewReader([]byte(fullInput))

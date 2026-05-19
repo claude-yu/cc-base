@@ -44,6 +44,13 @@ if ($WithQQ) {
 
 try { Get-Process cc-connect -ErrorAction Stop | Stop-Process -Force; Start-Sleep 1 } catch {}
 
+if (-not $env:CC_MODEL) {
+    $env:CC_MODEL = "claude-opus-4-6"
+    Write-Host "[OK] CC_MODEL = $env:CC_MODEL" -ForegroundColor Green
+} else {
+    Write-Host "[OK] CC_MODEL = $env:CC_MODEL (from env)" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "[START] Config: $ConfigPath" -ForegroundColor Cyan
 Write-Host "  WeChat: cc + codex | /new(reset) /bind(relay)" -ForegroundColor Gray

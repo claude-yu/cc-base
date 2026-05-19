@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -80,5 +81,47 @@ func TestReadInputStdinTrims(t *testing.T) {
 	want := "padded body\nkept line" // leading/trailing whitespace stripped
 	if got != want {
 		t.Fatalf("stdin readInput = %q, want %q (TrimSpace strips edges)", got, want)
+	}
+}
+
+func TestCleanCodexOutputTaskkill(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			"mojibake taskkill",
+			"\xb3\xc9\xb9\xa6: \xd2\xd1\xd6\xd5\xd6\xb9 PID 7260 \xb5\xc4\xbd\xf8\xb3\xcc\n我是 Codex 的回答",
+			"我是 Codex 的回答",
+		},
+		{
+			"chinese taskkill",
+			"成功: 已终止 PID 7260 的进程\n正常回答内容",
+			"正常回答内容",
+		},
+		{
+			"english taskkill",
+			"SUCCESS: The process with PID 1234 has been terminated.\nActual answer",
+			"Actual answer",
+		},
+		{
+			"multiple taskkill lines",
+			"\xb3\xc9\xb9\xa6: PID 7260\n\xb3\xc9\xb9\xa6: PID 7261\n回答在这里",
+			"回答在这里",
+		},
+		{
+			"no taskkill passthrough",
+			"这是正常的 Codex 回答\n没有任何噪声",
+			"这是正常的 Codex 回答\n没有任何噪声",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := cleanCodexOutput(c.input)
+			if strings.TrimSpace(got) != strings.TrimSpace(c.want) {
+				t.Fatalf("cleanCodexOutput() = %q, want %q", got, c.want)
+			}
+		})
 	}
 }

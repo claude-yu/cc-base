@@ -2,8 +2,34 @@
 # Copy this file and fill in your platform credentials.
 # Source location: <project>/cc-connect/config.toml
 # Deploy location: ~/.cc-connect/config.toml (auto-synced by start.ps1)
+#
+# Reverse-synced from live config: 2026-05-19
 
 language = "zh"
+
+# ═══════════════════════════════════════
+# cc-base Backend Presets
+# ═══════════════════════════════════════
+# CC role backend (env: CC_BACKEND):
+#   native_claude  — Claude Code CLI (default, recommended)
+#   anthropic_api  — Anthropic API (future)
+#   openai/deepseek/glm — OpenAI-compatible API (future)
+#
+# Codex role backend (env: CC_CODEX_BACKEND):
+#   native_codex  — Codex CLI (default, recommended)
+#   openai        — OpenAI API
+#   deepseek      — DeepSeek API
+#   glm           — GLM (智谱) API
+#
+# Common presets:
+#   A: WeChat + native Claude + native Codex (本机推荐)
+#   B: QQ + native Claude + native Codex
+#   C: WeChat + native Claude + DeepSeek as Codex
+#   D: QQ + native Claude + DeepSeek as Codex
+#
+# Backend is selected via environment variables, not this file.
+# Run setup.ps1 for interactive configuration.
+# ═══════════════════════════════════════
 
 [log]
 level = "info"
@@ -15,9 +41,21 @@ level = "info"
 # Replace YOUR_PROJECT_ROOT with your actual project root.
 
 [[commands]]
+name = "编码测试"
+description = "测试 cc-connect 命令输出编码"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\encoding-test.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
 name = "计划审查"
 description = "让 controller 生成计划并调用 Codex 审查，不执行"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\invoke-controller-command.ps1 -CommandName 计划审查 -Real YOUR_PROJECT_ROOT\\controller\\bin\\submit-plan-review.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "查看审查"
+description = "查看最近的计划审查结果（或指定 RunId）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-plan-review.ps1 \"{{args}}\""
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
@@ -39,8 +77,26 @@ exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\c
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
+name = "md状态查询"
+description = "只读采集工作目录的文件清单和 log tail，不执行（别名到 /md状态检查）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\collect-md-status.ps1 \"{{args}}\""
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
 name = "修复controller"
 description = "CC 直接修复 controller/cc-connect 基础设施报错，不走 Codex 审查"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\fix-controller.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "修复"
+description = "等同 /修复controller — CC 修复基础设施报错"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\fix-controller.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "fix"
+description = "等同 /修复controller — CC 修复基础设施报错"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\fix-controller.ps1 {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
@@ -69,9 +125,75 @@ exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\c
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
+name = "自动回传"
+description = "开关计划审查完成后是否自动推回聊天窗口"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "取消任务"
+description = "取消正在运行的任务（/取消任务 <RunId>，不传 RunId 自动取消最近任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "取消"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "中止"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "停止"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "cancel"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "abort"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "stop"
+description = "取消运行任务（同 /取消任务）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
 name = "进化习惯"
 description = "分析 observations 并生成进化候选（不自动写 skill）"
 exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\evolve-instincts.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "进化"
+description = "进化习惯（同 /进化习惯）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\evolve-instincts.ps1"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "审查结果"
+description = "查看最近的计划审查结果（同 /查看审查）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\show-plan-review.ps1 \"{{args}}\""
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "回传"
+description = "开关自动回传（同 /自动回传）"
+exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
@@ -84,30 +206,6 @@ work_dir = "YOUR_PROJECT_ROOT\\controller"
 name = "codex结果"
 description = "查看 Codex ask run 状态或结果"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe show {{args}}"
-work_dir = "YOUR_PROJECT_ROOT\\controller"
-
-[[commands]]
-name = "问cc"
-description = "Session-aware CC 对话（别名保持，实际走 /cc 通道）"
-exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe exec-cc --text \"{{args}}\" --session default"
-work_dir = "YOUR_PROJECT_ROOT\\controller"
-
-[[commands]]
-name = "cc结果"
-description = "查看 CC ask run 状态或结果"
-exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe show {{args}}"
-work_dir = "YOUR_PROJECT_ROOT\\controller"
-
-[[commands]]
-name = "自动回传"
-description = "开关计划审查完成后是否自动推回聊天窗口"
-exec = "powershell -NoProfile -ExecutionPolicy Bypass -File YOUR_PROJECT_ROOT\\controller\\bin\\auto-callback-toggle.ps1 {{args}}"
-work_dir = "YOUR_PROJECT_ROOT\\controller"
-
-[[commands]]
-name = "取消任务"
-description = "取消正在运行的任务（/取消任务 <RunId>，不传 RunId 自动取消最近任务）"
-exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe cancel {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
 [[commands]]
@@ -140,12 +238,55 @@ description = "查看系统状态（项目、活动任务、最近记录）"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+[[commands]]
+name = "查看"
+description = "查看系统状态（同 /状态）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "勘察"
+description = "查看系统状态（同 /状态）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "看看"
+description = "查看系统状态（同 /状态）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+# ═══════════════════════════════════════
+# 快捷别名：发给cc/claude/claudecode → Claude Code
+#           发给codex/gpt/Codex → Codex
+# ═══════════════════════════════════════
+[[commands]]
+name = "问cc"
+description = "Session-aware CC 对话（别名保持，实际走 /cc 通道）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe exec-cc --text \"{{args}}\" --session default"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "cc结果"
+description = "查看 CC ask run 状态或结果"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe show {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 # ═══════════════════════════════════════
 # Aliases
 # ═══════════════════════════════════════
 
+# --- 计划审查 ---
 [[aliases]]
-name = "审查计划"
+name = "查看审查"
+command = "/查看审查"
+
+[[aliases]]
+name = "审查结果"
+command = "/查看审查"
+
+[[aliases]]
+name = "计划审查"
 command = "/计划审查"
 
 [[aliases]]
@@ -153,28 +294,33 @@ name = "让cc写计划"
 command = "/计划审查"
 
 [[aliases]]
-name = "修controller"
-command = "/修复controller"
+name = "审查计划"
+command = "/计划审查"
+
+# --- MD 状态 ---
+[[aliases]]
+name = "md状态检查"
+command = "/md状态检查"
 
 [[aliases]]
-name = "fixcontroller"
-command = "/修复controller"
-
-[[aliases]]
-name = "修复bug"
-command = "/修复controller"
-
-[[aliases]]
-name = "修复"
-command = "/修复controller"
-
-[[aliases]]
-name = "fix"
-command = "/修复controller"
+name = "检查md状态"
+command = "/md状态检查"
 
 [[aliases]]
 name = "检查MD"
 command = "/md状态检查"
+
+[[aliases]]
+name = "md状态查询"
+command = "/md状态查询"
+
+[[aliases]]
+name = "查询md状态"
+command = "/md状态查询"
+
+[[aliases]]
+name = "查询MD"
+command = "/md状态查询"
 
 [[aliases]]
 name = "md进度"
@@ -208,6 +354,32 @@ command = "/md状态检查"
 name = "模拟进度"
 command = "/md状态检查"
 
+# --- 修复 ---
+[[aliases]]
+name = "修复controller"
+command = "/修复controller"
+
+[[aliases]]
+name = "修controller"
+command = "/修复controller"
+
+[[aliases]]
+name = "fixcontroller"
+command = "/修复controller"
+
+[[aliases]]
+name = "修复bug"
+command = "/修复controller"
+
+[[aliases]]
+name = "修复"
+command = "/修复controller"
+
+[[aliases]]
+name = "fix"
+command = "/修复controller"
+
+# --- 批准/执行 ---
 [[aliases]]
 name = "批准执行"
 command = "/批准执行"
@@ -225,6 +397,11 @@ name = "手动批准执行"
 command = "/人工批准执行"
 
 [[aliases]]
+name = "人工执行"
+command = "/人工批准执行"
+
+# --- Agent 路由 ---
+[[aliases]]
 name = "发给cc"
 command = "帮我问一下 cc"
 
@@ -233,7 +410,15 @@ name = "发给claude"
 command = "帮我问一下 cc"
 
 [[aliases]]
+name = "发给claudecode"
+command = "帮我问一下 cc"
+
+[[aliases]]
 name = "发给codex"
+command = "/问codex"
+
+[[aliases]]
+name = "发给Codex"
 command = "/问codex"
 
 [[aliases]]
@@ -267,6 +452,55 @@ command = "/问codex"
 [[aliases]]
 name = "问gpt"
 command = "/问codex"
+[[aliases]]
+name = "codex"
+command = "/问codex"
+[[aliases]]
+name = "Codex"
+command = "/问codex"
+[[aliases]]
+name = "问Codex"
+command = "/问codex"
+[[aliases]]
+name = "问GPT"
+command = "/问codex"
+[[aliases]]
+name = "GPT"
+command = "/问codex"
+[[aliases]]
+name = "问openai"
+command = "/问codex"
+[[aliases]]
+name = "openai"
+command = "/问codex"
+[[aliases]]
+name = "问o3"
+command = "/问codex"
+[[aliases]]
+name = "o3"
+command = "/问codex"
+
+# --- 查看结果 ---
+[[aliases]]
+name = "查看codex"
+command = "/codex结果"
+
+[[aliases]]
+name = "查看codex结果"
+command = "/codex结果"
+
+[[aliases]]
+name = "查看cc"
+command = "/cc结果"
+
+[[aliases]]
+name = "查看cc结果"
+command = "/cc结果"
+
+# --- 质询/学习 ---
+[[aliases]]
+name = "质询计划"
+command = "/质询计划"
 
 [[aliases]]
 name = "grill"
@@ -292,22 +526,7 @@ command = "/学习状态"
 name = "进化"
 command = "/进化习惯"
 
-[[aliases]]
-name = "查看codex"
-command = "/codex结果"
-
-[[aliases]]
-name = "查看codex结果"
-command = "/codex结果"
-
-[[aliases]]
-name = "查看cc"
-command = "/cc结果"
-
-[[aliases]]
-name = "查看cc结果"
-command = "/cc结果"
-
+# --- 自动回传 ---
 [[aliases]]
 name = "自动回传"
 command = "/自动回传"
@@ -316,10 +535,28 @@ command = "/自动回传"
 name = "回传"
 command = "/自动回传"
 
+# --- 执行确认 ---
 [[aliases]]
 name = "执行"
 command = "/执行"
 
+[[aliases]]
+name = "ok"
+command = "/执行"
+
+[[aliases]]
+name = "好"
+command = "/执行"
+
+[[aliases]]
+name = "可以"
+command = "/执行"
+
+[[aliases]]
+name = "确认"
+command = "/执行"
+
+# --- 取消 ---
 [[aliases]]
 name = "取消"
 command = "/取消任务"
@@ -339,6 +576,7 @@ command = "/取消任务"
 name = "stop"
 command = "/取消任务"
 
+# --- 项目切换 ---
 [[aliases]]
 name = "项目"
 command = "/项目"
@@ -364,35 +602,29 @@ name = "切换到"
 command = "/切项目"
 
 [[aliases]]
+name = "切项目"
+command = "/切项目"
+
+# --- 状态查看 ---
+[[aliases]]
 name = "查看"
 command = "/状态"
 
 [[aliases]]
-name = "ok"
-command = "/执行"
+name = "勘察"
+command = "/状态"
 
 [[aliases]]
-name = "好"
-command = "/执行"
+name = "看看"
+command = "/状态"
 
 [[aliases]]
-name = "可以"
-command = "/执行"
-
-[[aliases]]
-name = "确认"
-command = "/执行"
-
-[[aliases]]
-name = "执行"
-command = "/执行"
-
-[[aliases]]
-name = "切项目"
-command = "/切项目"
+name = "状态"
+command = "/状态"
 
 # ═══════════════════════════════════════
-# Claude Code project (WeChat)
+# Claude Code 执行专线（微信 + QQ 双入口）
+# 所有平台统一走 command 路由 → cc-controller
 # ═══════════════════════════════════════
 
 [[projects]]
@@ -406,7 +638,8 @@ type = "claudecode"
 [projects.agent.options]
 work_dir = "YOUR_WORK_DIR"
 mode = "default"
-system_prompt = """你是通过微信接入的 Claude Code 执行者（代号 cc）。用户从手机远程下达指令，你负责在当前工作区执行。
+model = "claude-opus-4-6"
+system_prompt = """你是通过微信/QQ接入的 Claude Code 执行者（代号 cc）。用户从手机远程下达指令，你负责在当前工作区执行。
 收到指令后：先说要做什么 → 执行 → 给出简短结果。
 被问到"你是谁/你能做什么"时：介绍自己的角色，说明当前工作区路径和目录结构，列出正在进行的项目阶段。
 涉及破坏性操作（删除/覆盖/重置）必须先确认。
@@ -428,27 +661,48 @@ token = "YOUR_WECHAT_TOKEN"
 base_url = "https://YOUR_CORP_SUBDOMAIN.weixin.qq.com"
 account_id = "YOUR_WECHAT_ACCOUNT_ID"
 
+# Optional: QQ platform via NapCat (see docs/qq-setup.md)
+# [[projects.platforms]]
+# type = "qq"
+# [projects.platforms.options]
+# ws_url = "ws://127.0.0.1:3001"
+# token = "YOUR_QQ_TOKEN"
+# allow_from = "YOUR_QQ_ID"
+# admin_from = "YOUR_QQ_ID"
+
 # ═══════════════════════════════════════
-# Codex project (WeChat + QQ)
+# Codex 原生 agent（已禁用，保留配置备用）
+# QQ/微信 Codex 问答现在统一走 /问codex → cc-controller
+# 如需恢复直连 Codex agent，取消注释以下配置
 # ═══════════════════════════════════════
-
-[[projects]]
-admin_from = "YOUR_ADMIN_ID"
-name = "codex"
-reset_on_idle_mins = 0
-
-[projects.agent]
-type = "codex"
-
-[projects.agent.options]
-work_dir = "YOUR_CODEX_WORK_DIR"
-mode = "suggest"
-
-[[projects.agent.providers]]
-name = "openai"
-api_key = "${OPENAI_API_KEY}"
-
-# Optional: QQ platform via NapCat
+# [[projects]]
+# admin_from = "YOUR_ADMIN_ID"
+# name = "codex"
+# reset_on_idle_mins = 0
+#
+# [projects.agent]
+# type = "codex"
+#
+# [projects.agent.options]
+# work_dir = "YOUR_CODEX_WORK_DIR"
+# mode = "suggest"
+#
+# [[projects.agent.providers]]
+# name = "openai"
+# api_key = "${OPENAI_API_KEY}"
+#
+# # Optional: DeepSeek
+# # [[projects.agent.providers]]
+# # name = "deepseek"
+# # api_key = "YOUR_DEEPSEEK_API_KEY"
+# # base_url = "https://api.deepseek.com/v1"
+#
+# # Optional: GLM (智谱)
+# # [[projects.agent.providers]]
+# # name = "glm"
+# # api_key = "YOUR_GLM_API_KEY"
+# # base_url = "https://open.bigmodel.cn/api/paas/v4"
+#
 # [[projects.platforms]]
 # type = "qq"
 # [projects.platforms.options]

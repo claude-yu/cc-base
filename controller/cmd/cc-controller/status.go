@@ -301,6 +301,68 @@ func findActiveRuns(runsRoot string) []runSummary {
 	return active
 }
 
+// cmdStatusShort shows a condensed 3-line status for mobile screens.
+func cmdStatusShort(root string) {
+	runsRoot := filepath.Join(root, "runs")
+	p := readActiveProject(root)
+
+	// Line 1: project + workdir
+	fmt.Printf("📂 %s  %s\n", p.Name, p.WorkDir)
+
+	// Line 2: active tasks + queue
+	active := findActiveRuns(runsRoot)
+	queueEntries := readQueue(root)
+	if len(active) > 0 {
+		latest := active[0]
+		fmt.Printf("▶ 活动 %d 个 | %s (%s)", len(active), latest.Stage, latest.UpdatedAgo)
+	} else {
+		fmt.Printf("▶ 活动 0 个")
+	}
+	if len(queueEntries) > 0 {
+		fmt.Printf(" | 排队 %d", len(queueEntries))
+	}
+	fmt.Println()
+
+	// Line 3: last completed task
+	latestDone := findLatestCompletedRun(runsRoot)
+	if latestDone.RunID != "" {
+		result := latestDone.Status
+		if latestDone.Question != "" {
+			q := latestDone.Question
+			if len(q) > 40 {
+				q = q[:40] + "…"
+			}
+			result += " " + q
+		}
+		fmt.Printf("✓ 最近完成: %s (%s)\n", result, latestDone.UpdatedAgo)
+	} else {
+		fmt.Println("✓ 最近完成: 无")
+	}
+}
+
+func findLatestCompletedRun(runsRoot string) runSummary {
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		return runSummary{}
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() && runIDPattern.MatchString(e.Name()) {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	// Sort newest first
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
+	for _, d := range dirs {
+		runDir := filepath.Join(runsRoot, d)
+		st := runStatus(runDir)
+		if st == "DONE" || st == "CANCELLED" || strings.HasPrefix(st, "FAILED") {
+			return summarizeRun(runDir, d)
+		}
+	}
+	return runSummary{}
+}
+
 // cmdStatus shows a comprehensive system status dashboard.
 func cmdStatus(root string) {
 	runsRoot := filepath.Join(root, "runs")

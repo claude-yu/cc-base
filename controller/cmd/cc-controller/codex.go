@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var codexNoisePatterns = []*regexp.Regexp{
@@ -69,6 +70,15 @@ func cleanCodexOutput(text string) string {
 			continue
 		}
 		if matched, _ := regexp.MatchString(`(?i)^(success:|成功:)`, trimmed); matched {
+			continue
+		}
+		if matched, _ := regexp.MatchString(`(?i).*(?:终止|terminate|killed|process).*PID\s+\d+`, trimmed); matched {
+			continue
+		}
+		if matched, _ := regexp.MatchString(`(?i).*PID\s+\d+.*(?:终止|terminate|killed|process)`, trimmed); matched {
+			continue
+		}
+		if !utf8.ValidString(trimmed) && strings.Contains(strings.ToUpper(trimmed), "PID") {
 			continue
 		}
 

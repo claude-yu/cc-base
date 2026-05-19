@@ -73,7 +73,16 @@ func sendCallback(runDir, message string) {
 			return
 		}
 	}
-	cmd := exec.Command(ccConnect, "send", "--stdin", "-p", "cc")
+
+	// Use reply-project if specified, otherwise default to "cc".
+	project := "cc"
+	if data, err := os.ReadFile(filepath.Join(runDir, "runner.reply-project")); err == nil {
+		if p := strings.TrimSpace(string(data)); p != "" {
+			project = p
+		}
+	}
+
+	cmd := exec.Command(ccConnect, "send", "--stdin", "-p", project)
 	cmd.Stdin = strings.NewReader(message)
 	cmd.Run()
 }
