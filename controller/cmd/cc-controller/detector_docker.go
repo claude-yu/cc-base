@@ -62,22 +62,14 @@ func scanDockerContainers(root string) []ResearchStatus {
 		if !isScienceImage(c.Image) {
 			continue
 		}
-		rs := inspectDockerContainer(c)
-		results = append(results, rs)
-	}
-
-	// Filter by root when set: only keep containers whose bind mount is under root
-	if root != "" {
-		var filtered []ResearchStatus
-		for _, rs := range results {
-			if rs.WorkDir == "" {
-				continue // no bind mount — can't prove in-scope
-			}
-			if isUnderRoot(rs.WorkDir, root) {
-				filtered = append(filtered, rs)
+		if root != "" {
+			mount := extractBindMount(c.Labels)
+			if mount == "" || !isUnderRoot(mount, root) {
+				continue
 			}
 		}
-		return filtered
+		rs := inspectDockerContainer(c)
+		results = append(results, rs)
 	}
 
 	return results
@@ -107,7 +99,11 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 		Confidence: "medium",
 	}
 
-	rs.Evidence = append(rs.Evidence, "容器: "+c.Names+" ("+c.ID[:12]+")")
+	short := c.ID
+	if len(short) > 12 {
+		short = short[:12]
+	}
+	rs.Evidence = append(rs.Evidence, "容器: "+c.Names+" ("+short+")")
 	rs.Evidence = append(rs.Evidence, "镜像: "+c.Image)
 
 	cmd := strings.Trim(c.Command, "\"")
