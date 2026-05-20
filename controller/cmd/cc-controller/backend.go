@@ -55,10 +55,10 @@ func resolveAPIConfig(backend CodexBackend) apiConfig {
 		defaultModel = "gpt-4o"
 	case CodexBackendDeepSeek:
 		defaultBase = "https://api.deepseek.com/v1"
-		defaultModel = "deepseek-chat"
+		defaultModel = "deepseek-v4-pro"
 	case CodexBackendGLM:
 		defaultBase = "https://open.bigmodel.cn/api/paas/v4"
-		defaultModel = "glm-4"
+		defaultModel = "glm-5"
 	}
 
 	base := os.Getenv("CC_CODEX_API_BASE")
