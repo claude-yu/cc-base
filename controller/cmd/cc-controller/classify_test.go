@@ -216,11 +216,16 @@ func TestIsMDQuery(t *testing.T) {
 		"md跑完了吗", "最近那个md任务怎么样",
 		"动力学跑到哪了", "轨迹出来了吗",
 		"gromacs现在怎么样",
+		// #3 新增
+		"md还在跑吗", "模拟结束了吗", "动力学完成没",
+		"gromacs还在跑吗", "轨迹出来没",
+		"模拟完成了吗", "gromacs还在动吗",
 	}
 	negative := []string{
 		"科研任务", "系统状态", "看看结果", "模拟结果",
 		"帮我写个md文件", "分子动力学是什么", "模拟退火",
 		"md格式怎么写", "markdown表格怎么写",
+		"模拟退火算法", "gromacs怎么安装",
 	}
 	for _, s := range positive {
 		if !isMDQuery(s) {

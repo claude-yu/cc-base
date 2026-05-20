@@ -355,8 +355,10 @@ var statusQueryTrigger = []string{
 	"任务结果", "模拟结果",
 	"跑完了吗", "完成了吗", "还在跑吗",
 	"项目状态", "md任务",
-	"动力学跑到哪", "轨迹出来了吗",
+	"动力学跑到哪", "轨迹出来",
 	"gromacs现在怎么样",
+	"模拟结束", "模拟完成", "动力学完成",
+	"gromacs还在",
 	"haddock状态", "haddock进度", "haddock监控",
 	"schrodinger状态", "schrodinger进度",
 	"maestro状态", "maestro进度", "glide状态",
@@ -425,8 +427,10 @@ func isStatusQuery(text string) bool {
 var mdQueryTrigger = []string{
 	"md进度", "模拟进度", "md状态", "md跑到哪", "模拟跑到哪",
 	"gromacs进度", "gromacs状态", "md怎么样",
-	"md跑完", "md任务", "动力学跑到哪", "轨迹出来了吗",
+	"md跑完", "md任务", "动力学跑到哪", "轨迹出来",
 	"gromacs现在怎么样",
+	"md还在跑", "模拟结束", "模拟完成", "动力学完成",
+	"gromacs还在",
 }
 
 func isMDQuery(text string) bool {
