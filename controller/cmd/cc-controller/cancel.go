@@ -45,6 +45,34 @@ func cancelTask(root, runID string) {
 	fmt.Printf("已取消: %s (PID %d)\n", runID, pid)
 }
 
+func isRange(s string) bool {
+	parts := strings.SplitN(s, "-", 2)
+	return len(parts) == 2 && isNumeric(parts[0]) && isNumeric(parts[1])
+}
+
+func cmdCancelRange(root string, rangeStr string) {
+	parts := strings.SplitN(rangeStr, "-", 2)
+	lo, _ := strconv.Atoi(parts[0])
+	hi, _ := strconv.Atoi(parts[1])
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+
+	entries := readQueue(root)
+	cancelled := 0
+	for idx := lo; idx <= hi; idx++ {
+		e := queueFindByIndex(entries, idx)
+		if e == nil {
+			fmt.Fprintf(os.Stderr, "#%d 未找到，跳过\n", idx)
+			continue
+		}
+		cancelTask(root, e.RunID)
+		queueRemove(root, e.RunID)
+		cancelled++
+	}
+	fmt.Printf("已取消 %d 个任务 (%s)\n", cancelled, rangeStr)
+}
+
 func cancelLatest(root string) {
 	entries, err := os.ReadDir(filepath.Join(root, "runs"))
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
 const timeFormat = "20060102-150405"
@@ -121,6 +122,8 @@ func main() {
 	case "cancel":
 		if len(args) == 0 || args[0] == "" {
 			cmdCancelSmart(root)
+		} else if strings.Contains(args[0], "-") && isRange(args[0]) {
+			cmdCancelRange(root, args[0])
 		} else if isNumeric(args[0]) {
 			cmdCancelQueueIndex(root, args[0])
 		} else {
