@@ -217,6 +217,37 @@ func TestPythonMatch_ContextJsonBoost(t *testing.T) {
 	}
 }
 
+func TestPythonMatch_ScoreCap(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "run_pipeline.py"), []byte("pass\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "config.py"), []byte("x=1\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.py"), []byte("pass\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "context.json"), []byte(`{}`), 0644)
+	os.MkdirAll(filepath.Join(dir, "checkpoints"), 0755)
+
+	d := &pythonDetector{}
+	_, score := d.Match(dir)
+	if score > 100 {
+		t.Errorf("score=%d, want ≤100", score)
+	}
+}
+
+func TestRMatch_ScoreCap(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "run_pipeline.R"), []byte("1\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "config.R"), []byte("1\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "research_context.R"), []byte("1\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "research_context.json"), []byte(`{}`), 0644)
+	os.WriteFile(filepath.Join(dir, "renv.lock"), []byte(`{}`), 0644)
+	os.WriteFile(filepath.Join(dir, "extra.R"), []byte("1\n"), 0644)
+
+	d := &rDetector{}
+	_, score := d.Match(dir)
+	if score > 100 {
+		t.Errorf("score=%d, want ≤100", score)
+	}
+}
+
 func TestPythonMatch_BelowThreshold(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "config.py"), []byte("x=1\n"), 0644)

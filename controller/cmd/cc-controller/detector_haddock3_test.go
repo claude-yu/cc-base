@@ -185,6 +185,27 @@ func TestStageHasOutput(t *testing.T) {
 	}
 }
 
+func TestStageHasOutput_IgnoresTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	stage := "1_rigidbody"
+	sd := filepath.Join(dir, stage)
+	os.MkdirAll(sd, 0755)
+
+	os.WriteFile(filepath.Join(sd, "__init__.py"), []byte{}, 0644)
+	os.WriteFile(filepath.Join(sd, ".gitkeep"), []byte{}, 0644)
+	os.WriteFile(filepath.Join(sd, "cache.pyc"), []byte{}, 0644)
+	os.WriteFile(filepath.Join(sd, "scratch.tmp"), []byte{}, 0644)
+	if stageHasOutput(dir, stage) {
+		t.Error("temp/cache files only should not count as output")
+	}
+
+	os.WriteFile(filepath.Join(sd, "result1.pdb"), []byte{}, 0644)
+	os.WriteFile(filepath.Join(sd, "result2.pdb"), []byte{}, 0644)
+	if !stageHasOutput(dir, stage) {
+		t.Error("2 real output files should count")
+	}
+}
+
 func TestFormatStageProgress(t *testing.T) {
 	cases := []struct {
 		completed []string

@@ -228,6 +228,13 @@ func classifyHaddock3Stages(dir string) (completed []string, current string) {
 	return completed, current
 }
 
+var stageIgnoreFiles = map[string]bool{
+	"__init__.py": true,
+	".gitkeep":    true,
+	".gitignore":  true,
+	".DS_Store":   true,
+}
+
 func stageHasOutput(dir, stage string) bool {
 	stageDir := filepath.Join(dir, stage)
 	entries, err := os.ReadDir(stageDir)
@@ -236,9 +243,14 @@ func stageHasOutput(dir, stage string) bool {
 	}
 	fileCount := 0
 	for _, e := range entries {
-		if !e.IsDir() {
-			fileCount++
+		if e.IsDir() {
+			continue
 		}
+		name := e.Name()
+		if stageIgnoreFiles[name] || strings.HasSuffix(name, ".pyc") || strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		fileCount++
 	}
 	return fileCount >= 2
 }

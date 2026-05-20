@@ -438,6 +438,9 @@ func (d *pythonDetector) Match(dir string) (bool, int) {
 	if score < 20 {
 		return false, 0
 	}
+	if score > 100 {
+		score = 100
+	}
 	return true, score
 }
 
@@ -704,6 +707,9 @@ func (d *rDetector) Match(dir string) (bool, int) {
 
 	if score < 20 {
 		return false, 0
+	}
+	if score > 100 {
+		score = 100
 	}
 	return true, score
 }
