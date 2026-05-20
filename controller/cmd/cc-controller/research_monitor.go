@@ -18,48 +18,101 @@ const (
 	archivedThresholdMins   = 7 * 24 * 60 // >7d = archived_failed
 )
 
+type MonitorOutput struct {
+	Scan    MonitorScan    `json:"scan"`
+	Summary MonitorSummary `json:"summary"`
+	Tasks   []ResearchStatus `json:"tasks"`
+}
+
+type MonitorScan struct {
+	RunID          string `json:"run_id"`
+	WorkDir        string `json:"work_dir"`
+	ScannedAt      string `json:"scanned_at"`
+	ScanDepth      int    `json:"scan_depth"`
+	DetectorFilter string `json:"detector_filter,omitempty"`
+	TotalTasks     int    `json:"total_tasks"`
+}
+
+type MonitorSummary struct {
+	ByState  map[string]int `json:"by_state"`
+	ByBucket map[string]int `json:"by_bucket"`
+}
+
+func buildMonitorOutput(results []ResearchStatus, runID, workDir, detectorFilter string, scanDepth int) MonitorOutput {
+	tasks := results
+	if tasks == nil {
+		tasks = []ResearchStatus{}
+	}
+	return MonitorOutput{
+		Scan: MonitorScan{
+			RunID:          runID,
+			WorkDir:        workDir,
+			ScannedAt:      time.Now().UTC().Format(time.RFC3339),
+			ScanDepth:      scanDepth,
+			DetectorFilter: detectorFilter,
+			TotalTasks:     len(tasks),
+		},
+		Summary: buildSummaryFromResults(tasks),
+		Tasks:   tasks,
+	}
+}
+
 func cmdResearchMonitor(root string, args []string) {
 	filterDetector := ""
+	outputFormat := ""
 	var positional []string
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--detector" && i+1 < len(args) {
-			filterDetector = args[i+1]
-			i++
-		} else {
+		switch args[i] {
+		case "--detector":
+			if i+1 < len(args) {
+				filterDetector = args[i+1]
+				i++
+			}
+		case "--format":
+			if i+1 < len(args) {
+				outputFormat = args[i+1]
+				i++
+			}
+		default:
 			positional = append(positional, args[i])
 		}
+	}
+
+	if outputFormat != "" && outputFormat != "json" {
+		fmt.Fprintf(os.Stderr, "unknown format %q, supported: json\n", outputFormat)
+		return
 	}
 
 	subcmd := strings.TrimSpace(strings.Join(positional, " "))
 
 	switch {
 	case subcmd == "" || subcmd == "刷新":
-		doFullScan(root, filterDetector)
+		doFullScan(root, filterDetector, outputFormat)
 	case subcmd == "历史":
-		showFiltered(root, "historical")
+		showFiltered(root, "historical", outputFormat)
 	case subcmd == "归档":
-		showFiltered(root, "archived")
+		showFiltered(root, "archived", outputFormat)
 	case subcmd == "全部":
-		showFiltered(root, "all")
+		showFiltered(root, "all", outputFormat)
 	case isNumeric(subcmd):
-		showTaskDetail(root, atoiSafe(subcmd))
+		showTaskDetail(root, atoiSafe(subcmd), outputFormat)
 	default:
 		if strings.HasSuffix(subcmd, " 全部") {
-			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 全部"), "all")
+			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 全部"), "all", outputFormat)
 		} else if strings.HasSuffix(subcmd, " 归档") {
-			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 归档"), "archived")
+			showTaskByKeyword(root, strings.TrimSuffix(subcmd, " 归档"), "archived", outputFormat)
 		} else {
-			showTaskByKeyword(root, subcmd, "default")
+			showTaskByKeyword(root, subcmd, "default", outputFormat)
 		}
 	}
 }
 
-func doFullScan(root, filterDetector string) {
+func doFullScan(root, filterDetector, outputFormat string) {
 	workDir := resolveMonitorRoot()
 
 	scanDepth := defaultScanDepth
 	if v := os.Getenv("CC_RESEARCH_SCAN_DEPTH"); v != "" {
-		if n := atoiSafe(v); n > 0 {
+		if n := atoiSafe(v); n > 0 && n <= 10 {
 			scanDepth = n
 		}
 	}
@@ -102,6 +155,17 @@ func doFullScan(root, filterDetector string) {
 	})
 
 	writeFile(filepath.Join(root, "latest-monitor-run.txt"), runID)
+
+	if outputFormat == "json" {
+		out := buildMonitorOutput(results, runID, workDir, filterDetector, scanDepth)
+		data, err := json.MarshalIndent(out, "", "  ")
+		if err != nil {
+			printJSONError("marshal_failed", err.Error())
+			return
+		}
+		fmt.Println(string(data))
+		return
+	}
 
 	summary := formatMobileSummary(results, runDir)
 	fmt.Print(summary)
@@ -227,27 +291,48 @@ func loadLatestResults(root string) ([]ResearchStatus, string) {
 	return results, runID
 }
 
-func showTaskDetail(root string, index int) {
+func showTaskDetail(root string, index int, outputFormat string) {
 	results, _ := loadLatestResults(root)
 	if results == nil {
-		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+		if outputFormat == "json" {
+			fmt.Println(`{"error":"no_scan_results"}`)
+		} else {
+			fmt.Println("尚无扫描结果，请先执行 科研监控")
+		}
 		return
 	}
 	for _, rs := range results {
 		if rs.Index == index {
-			fmt.Print(formatTaskDetail(rs))
+			if outputFormat == "json" {
+				data, err := json.MarshalIndent(rs, "", "  ")
+				if err != nil {
+					printJSONError("marshal_failed", err.Error())
+					return
+				}
+				fmt.Println(string(data))
+			} else {
+				fmt.Print(formatTaskDetail(rs))
+			}
 			return
 		}
 	}
-	fmt.Println("未找到任务 #" + itoa(index) + "（共 " + itoa(len(results)) + " 个任务）")
+	if outputFormat == "json" {
+		printJSONError("task_not_found", "index "+itoa(index)+" not found in "+itoa(len(results))+" tasks")
+	} else {
+		fmt.Println("未找到任务 #" + itoa(index) + "（共 " + itoa(len(results)) + " 个任务）")
+	}
 }
 
 const keywordMaxDisplay = 10
 
-func showTaskByKeyword(root, keyword, mode string) {
+func showTaskByKeyword(root, keyword, mode, outputFormat string) {
 	results, runID := loadLatestResults(root)
 	if results == nil {
-		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+		if outputFormat == "json" {
+			fmt.Println(`{"error":"no_scan_results"}`)
+		} else {
+			fmt.Println("尚无扫描结果，请先执行 科研监控")
+		}
 		return
 	}
 	lower := strings.ToLower(keyword)
@@ -260,9 +345,19 @@ func showTaskByKeyword(root, keyword, mode string) {
 		}
 	}
 	if len(matches) == 0 {
-		fmt.Println("未找到匹配 \"" + keyword + "\" 的任务")
+		if outputFormat == "json" {
+			printJSONError("no_matches", "keyword '"+keyword+"' not found in "+itoa(len(results))+" tasks")
+		} else {
+			fmt.Println("未找到匹配 \"" + keyword + "\" 的任务")
+		}
 		return
 	}
+
+	if outputFormat == "json" {
+		printJSONResults(matches, runID, keyword)
+		return
+	}
+
 	if len(matches) == 1 {
 		fmt.Print(formatTaskDetail(matches[0]))
 		return
@@ -319,27 +414,91 @@ func showTaskByKeyword(root, keyword, mode string) {
 				sb.WriteString(taskLine(rs, "short") + "\n")
 			}
 			if truncated {
-				sb.WriteString("... 显示 " + itoa(len(display)) + "/" + itoa(len(recent)) + "。更多: /科研监控 " + keyword + " 全部\n")
+				sb.WriteString("... 显示 " + itoa(len(display)) + "/" + itoa(len(recent)) + "。更多: 科研监控 " + keyword + " 全部\n")
 			}
 		}
 		if len(arch) > 0 {
-			sb.WriteString("\n归档 (>7天): " + itoa(len(arch)) + " 个（/科研监控 " + keyword + " 归档）\n")
+			sb.WriteString("\n归档 (>7天): " + itoa(len(arch)) + " 个（科研监控 " + keyword + " 归档）\n")
 		}
 		if len(recent) == 0 && len(arch) > 0 {
 			sb.WriteString("近期无匹配，全部已归档\n")
 		}
 	}
 
-	sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+	sb.WriteString("\n用 科研监控 <序号> 查看详情")
 	fmt.Print(sb.String())
 }
 
-func showFiltered(root, filter string) {
-	results, runID := loadLatestResults(root)
-	if results == nil {
-		fmt.Println("尚无扫描结果，请先执行 /科研监控")
+func printJSONError(code, message string) {
+	e := struct {
+		Error   string `json:"error"`
+		Message string `json:"message,omitempty"`
+	}{Error: code, Message: message}
+	data, _ := json.Marshal(e)
+	fmt.Println(string(data))
+}
+
+func printJSONResults(results []ResearchStatus, runID, filter string) {
+	out := MonitorOutput{
+		Scan: MonitorScan{
+			RunID:          runID,
+			DetectorFilter: filter,
+			TotalTasks:     len(results),
+		},
+		Summary: buildSummaryFromResults(results),
+		Tasks:   results,
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		printJSONError("marshal_failed", err.Error())
 		return
 	}
+	fmt.Println(string(data))
+}
+
+func buildSummaryFromResults(results []ResearchStatus) MonitorSummary {
+	byState := map[string]int{}
+	byBucket := map[string]int{}
+	for _, rs := range results {
+		byState[rs.State]++
+		if rs.Bucket != "" {
+			byBucket[rs.Bucket]++
+		}
+	}
+	return MonitorSummary{ByState: byState, ByBucket: byBucket}
+}
+
+func showFiltered(root, filter, outputFormat string) {
+	results, runID := loadLatestResults(root)
+	if results == nil {
+		if outputFormat == "json" {
+			fmt.Println(`{"error":"no_scan_results"}`)
+		} else {
+			fmt.Println("尚无扫描结果，请先执行 科研监控")
+		}
+		return
+	}
+
+	if outputFormat == "json" {
+		var filtered []ResearchStatus
+		for _, rs := range results {
+			switch filter {
+			case "historical":
+				if rs.Bucket == "historical_failed" || isArchived(rs) {
+					filtered = append(filtered, rs)
+				}
+			case "archived":
+				if isArchived(rs) {
+					filtered = append(filtered, rs)
+				}
+			case "all":
+				filtered = append(filtered, rs)
+			}
+		}
+		printJSONResults(filtered, runID, filter)
+		return
+	}
+
 	tsSuffix := ""
 	if ts := scanTimeFromRunID(runID); ts != "" {
 		tsSuffix = " (" + ts + " 扫描)"
@@ -374,9 +533,9 @@ func showFiltered(root, filter string) {
 			if len(hist) > 0 {
 				sb.WriteString("\n")
 			}
-			sb.WriteString("归档 (>7天): " + itoa(len(arch)) + " 个（/科研监控 归档）\n")
+			sb.WriteString("归档 (>7天): " + itoa(len(arch)) + " 个（科研监控 归档）\n")
 		}
-		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		sb.WriteString("\n用 科研监控 <序号> 查看详情")
 		fmt.Print(sb.String())
 
 	case "archived":
@@ -400,9 +559,9 @@ func showFiltered(root, filter string) {
 			sb.WriteString(taskLine(rs, "short") + "\n")
 		}
 		if len(arch) > keywordMaxDisplay {
-			sb.WriteString("... 显示 " + itoa(keywordMaxDisplay) + "/" + itoa(len(arch)) + "。更多: /科研监控 全部\n")
+			sb.WriteString("... 显示 " + itoa(keywordMaxDisplay) + "/" + itoa(len(arch)) + "。更多: 科研监控 全部\n")
 		}
-		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		sb.WriteString("\n用 科研监控 <序号> 查看详情")
 		fmt.Print(sb.String())
 
 	case "all":
@@ -411,7 +570,7 @@ func showFiltered(root, filter string) {
 		for _, rs := range results {
 			sb.WriteString(taskLine(rs, "short") + "\n")
 		}
-		sb.WriteString("\n用 /科研监控 <序号> 查看详情")
+		sb.WriteString("\n用 科研监控 <序号> 查看详情")
 		fmt.Print(sb.String())
 	}
 }
@@ -564,9 +723,19 @@ func walkDirs(dir string, currentDepth, maxDepth int, fn func(string, int)) {
 	}
 }
 
-func formatMobileSummary(results []ResearchStatus, runDir string) string {
+func formatMobileSummary(results []ResearchStatus, runDir string, filterLabels ...string) string {
+	filterLabel := ""
+	if len(filterLabels) > 0 {
+		filterLabel = filterLabels[0]
+	}
+
+	header := "科研监控"
+	if filterLabel != "" {
+		header += " " + filterLabel
+	}
+
 	if len(results) == 0 {
-		return "科研监控: 未发现任何可识别的科研任务\n建议: 确认 CC_WORK_DIR 或 CC_RESEARCH_MONITOR_ROOT 指向科研项目目录\n"
+		return header + ": 未发现任何可识别的科研任务\n建议: 确认 CC_WORK_DIR 或 CC_RESEARCH_MONITOR_ROOT 指向科研项目目录\n"
 	}
 
 	activeFailed := 0
@@ -590,7 +759,7 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 	failedDisplay := activeFailed + historicalFailed
 
 	var sb strings.Builder
-	sb.WriteString("科研监控: " + itoa(len(results)) + " 个任务 (" + time.Now().Format("01-02 15:04") + ")\n")
+	sb.WriteString(header + ": " + itoa(len(results)) + " 个任务 (" + time.Now().Format("01-02 15:04") + ")\n")
 
 	var parts []string
 	if failedDisplay > 0 {
@@ -641,6 +810,8 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 			}
 			sb.WriteString(line + "\n")
 		}
+	} else if failedDisplay > 0 {
+		sb.WriteString("\n失败任务均为历史记录（非近期活跃）。\n")
 	} else if stateCounts["running"] == 0 {
 		sb.WriteString("\n当前无活跃异常或运行中任务。\n")
 	}
@@ -655,7 +826,7 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 		if archivedCount > 0 {
 			hParts = append(hParts, itoa(archivedCount)+" 个归档")
 		}
-		sb.WriteString("历史/归档: " + strings.Join(hParts, "，") + "（/科研监控 历史）\n")
+		sb.WriteString("历史/归档: " + strings.Join(hParts, "，") + "（科研监控 历史）\n")
 	}
 
 	// Running tasks (max 2)
@@ -682,8 +853,12 @@ func formatMobileSummary(results []ResearchStatus, runDir string) string {
 		}
 	}
 
-	sb.WriteString("\n查看详情: /科研监控 <序号>\n")
-	sb.WriteString("刷新: /科研监控 刷新\n")
+	if len(results) == 1 {
+		sb.WriteString("\n查看详情: 科研监控 " + itoa(results[0].Index) + "\n")
+	} else {
+		sb.WriteString("\n查看详情: 科研监控 <序号>\n")
+	}
+	sb.WriteString("刷新: 科研监控 刷新\n")
 
 	return sb.String()
 }
@@ -695,6 +870,18 @@ func detectorShortName(det string) string {
 	switch det {
 	case "gromacs":
 		return "GROMACS"
+	case "haddock3":
+		return "HADDOCK3"
+	case "rosetta":
+		return "Rosetta"
+	case "autodock_vina":
+		return "AutoDock/Vina"
+	case "alphafold":
+		return "AlphaFold/ColabFold"
+	case "amber_openmm":
+		return "Amber/OpenMM"
+	case "schrodinger":
+		return "Schrodinger"
 	case "python_pipeline":
 		return "Python"
 	case "r_pipeline":

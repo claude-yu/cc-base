@@ -43,6 +43,11 @@ func allDetectors() []Detector {
 	return []Detector{
 		&gromacsDetector{},
 		&schrodingerDetector{},
+		&haddock3Detector{},
+		&rosettaDetector{},
+		&autodockVinaDetector{},
+		&alphafoldDetector{},
+		&amberOpenMMDetector{},
 		&pythonDetector{},
 		&rDetector{},
 		&genericCLIDetector{},
@@ -190,6 +195,10 @@ func filterFalseErrors(hits []string) []string {
 }
 
 func parseJSON(path string) map[string]interface{} {
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() > 10*1024*1024 {
+		return nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil

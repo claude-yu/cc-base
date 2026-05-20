@@ -1,19 +1,21 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
 )
 
 func cmdExecCC(root string, args []string) {
-	text, sessionID, mode, replyProject, auto := parseExecFlags(args)
-	text = strings.TrimSpace(text)
+	f := parseExecFlags(args)
+	text := strings.TrimSpace(f.text)
 	if text == "" || strings.HasPrefix(text, "--") {
 		fmt.Fprintln(os.Stderr, `用法：
 /cc <消息>        和 CC 连续对话
@@ -23,10 +25,18 @@ func cmdExecCC(root string, args []string) {
 /切项目 <名称>    切换工作项目`)
 		os.Exit(1)
 	}
+
+	// Resolve project: binding (per-chat) > active_project.json (global)
+	project := resolveProjectForChat(root, f.platform, f.chatID)
+	touchBinding(root, f.platform, f.chatID)
+
+	sessionID := f.session
 	if sessionID == "" {
 		sessionID = "default"
 	}
-	sessionID = resolveSessionID(root, sessionID)
+	sessionID = project.ProjectID + "-" + sessionID
+	mode := f.mode
+	auto := f.auto
 	if auto && mode == "" {
 		mode = classifyMode(text).String()
 	}
@@ -36,8 +46,11 @@ func cmdExecCC(root string, args []string) {
 	os.MkdirAll(runDir, 0755)
 	os.WriteFile(filepath.Join(runDir, "incoming-message.txt"), []byte(text), 0644)
 
-	if replyProject != "" {
-		writeFile(filepath.Join(runDir, "runner.reply-project"), replyProject)
+	if f.chatID != "" {
+		writeFile(filepath.Join(runDir, "runner.chat-id"), bindingKey(f.platform, f.chatID))
+	}
+	if f.replyProject != "" {
+		writeFile(filepath.Join(runDir, "runner.reply-project"), f.replyProject)
 	}
 
 	sessionDir := filepath.Join(root, "sessions", sessionID)
@@ -71,6 +84,7 @@ func cmdExecCC(root string, args []string) {
 	// execute_request: generate confirmation card, no background runner
 	// MUST return before spawning any runner or calling Claude.
 	if mode == "execute_request" {
+		logRoute(root, text, "execute_request", "confirm_card", mode, runID, "classifyMode")
 		// execute_request: use CC_EXECUTE_WORK_DIR (safe sandbox).
 		// Never inherit CC_WORK_DIR (research project dir).
 		workDir := os.Getenv("CC_EXECUTE_WORK_DIR")
@@ -109,9 +123,36 @@ func cmdExecCC(root string, args []string) {
 		return
 	}
 
+	// Result location queries: "结果在哪/文件在哪/输出在哪" → local handler
+	if isResultLocationQuery(text) {
+		os.WriteFile(filepath.Join(runDir, "is-status-query"), []byte("1"), 0644)
+		logRoute(root, text, "result_location", "local_handler", mode, runID, "result_location")
+		result := formatResultLocation(root, runID)
+		os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(result), 0644)
+		updateStatusJSON(runDir, "completed", "done", 0)
+		setExitCode(runDir, 0)
+		appendEvent(runDir, eventEntry{Ts: time.Now().UTC().Format(time.RFC3339), RunID: runID, Type: "completed", ExitCode: 0})
+		sendCallback(runDir, "[CC] "+result)
+		fmt.Printf("已返回结果位置查询 (Run ID: %s)\n", runID)
+		return
+	}
+
 	// Native status queries: handle in Go, skip Claude entirely.
-	if mode == "readonly" && isStatusQuery(text) {
-		result := formatLatestStatus(root, runID)
+	// isStatusQuery is more specific than classifyMode — if it matches,
+	// always handle natively regardless of mode (execute already returned above).
+	if isStatusQuery(text) {
+		// Mark as status query so formatLatestStatus skips it
+		os.WriteFile(filepath.Join(runDir, "is-status-query"), []byte("1"), 0644)
+		detector := "status"
+		if isMDQuery(text) {
+			detector = "md_status"
+		} else if isResearchQuery(text) {
+			detector = "research_status"
+		} else if isSystemStatusQuery(text) {
+			detector = "system_status"
+		}
+		logRoute(root, text, "status_query", "local_handler", mode, runID, detector)
+		result := resolveAndFormatStatus(root, runID, text)
 		os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(result), 0644)
 		updateStatusJSON(runDir, "completed", "done", 0)
 		setExitCode(runDir, 0)
@@ -121,17 +162,15 @@ func cmdExecCC(root string, args []string) {
 		return
 	}
 
-	// Resolve workdir for the runner based on mode.
-	//   advice → project dir (active_project.json / CC_WORK_DIR)
-	//   readonly (project query, not status) → project dir
-	//   execute → handled above via execute_request
 	var runnerWorkDir string
 	if mode == "advice" || mode == "readonly" {
-		runnerWorkDir = readActiveProject(root).WorkDir
+		runnerWorkDir = project.WorkDir
 	}
 	if runnerWorkDir != "" {
 		writeFile(filepath.Join(runDir, "runner.workdir"), runnerWorkDir)
 	}
+
+	logRoute(root, text, mode, "claude_runner", mode, runID, "classifyMode")
 
 	// Spawn background runner with session info and mode
 	exe, _ := os.Executable()
@@ -147,6 +186,9 @@ func cmdExecCC(root string, args []string) {
 	}
 	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", runner.Process.Pid))
 	updateStatusJSON(runDir, "running", mode+"_running", runner.Process.Pid)
+
+	preview := sanitizeQuestionPreview(text)
+	sendCallback(runDir, fmt.Sprintf("收到，处理中...\n问题: %s", preview))
 
 	fmt.Printf("已开始 CC 处理 (Run ID: %s, Session: %s, Mode: %s)\n", runID, sessionID, mode)
 }
@@ -236,13 +278,24 @@ func buildExecuteSummary(workDir string) string {
 	return sb.String()
 }
 
-func parseExecFlags(args []string) (text, session, mode, replyProject string, auto bool) {
+type execFlags struct {
+	text         string
+	session      string
+	mode         string
+	replyProject string
+	chatID       string
+	platform     string
+	auto         bool
+}
+
+func parseExecFlags(args []string) execFlags {
+	var f execFlags
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--text":
 			i++
 			if i >= len(args) {
-				return "", session, mode, replyProject, auto
+				return f
 			}
 			parts := []string{args[i]}
 			i++
@@ -251,41 +304,131 @@ func parseExecFlags(args []string) (text, session, mode, replyProject string, au
 				i++
 			}
 			i--
-			text = strings.Join(parts, " ")
+			f.text = strings.Join(parts, " ")
 		case "--session":
 			i++
 			if i < len(args) {
-				session = args[i]
+				f.session = args[i]
 			}
 		case "--auto":
-			auto = true
+			f.auto = true
 		case "--mode":
 			i++
 			if i < len(args) {
-				mode = args[i]
+				f.mode = args[i]
 			}
 		case "--reply-project":
 			i++
 			if i < len(args) {
-				replyProject = args[i]
+				f.replyProject = args[i]
+			}
+		case "--chat-id":
+			i++
+			if i < len(args) {
+				f.chatID = args[i]
+			}
+		case "--platform":
+			i++
+			if i < len(args) {
+				f.platform = args[i]
 			}
 		}
 	}
-	return
+	return f
 }
 
-// isStatusQuery detects queries about controller/runs status that can be
-// handled natively in Go without spawning Claude.
+// statusQueryTrigger: compound phrases that unambiguously indicate status intent.
 var statusQueryTrigger = []string{
 	"查看状态", "查看运行", "查看进度",
 	"最新状态", "最新运行", "运行状态", "运行结果",
 	"cc状态", "任务状态", "任务进度",
 	"继续", "进度如何", "go on", "goon",
+	"看看结果", "结果如何", "任务怎么样了",
+	"运行情况", "跑到哪了", "看看进度", "看看状态",
+	"现在怎么样了", "进展怎么样了",
+	"md进度", "模拟进度", "md状态", "md跑到哪", "模拟跑到哪",
+	"gromacs进度", "gromacs状态", "md怎么样",
+	"科研任务", "科研监控", "科研状态", "科研结果",
+	"研究任务", "研究状态", "研究进度",
+	"任务监控", "运行监控",
+	"系统状态", "controller状态", "当前状态",
+	"任务结果", "模拟结果",
+	"跑完了吗", "完成了吗", "还在跑吗",
+	"项目状态", "md任务",
+	"动力学跑到哪", "轨迹出来了吗",
+	"gromacs现在怎么样",
+	"haddock状态", "haddock进度", "haddock监控",
+	"schrodinger状态", "schrodinger进度",
+	"maestro状态", "maestro进度", "glide状态",
+	"rosetta状态", "rosetta进度",
+	"vina状态", "vina进度",
+	"autodock状态", "autodock进度",
+	"alphafold状态", "alphafold进度",
+	"colabfold状态", "colabfold进度",
+	"蛋白折叠状态", "蛋白折叠进度",
+	"amber状态", "amber进度",
+	"openmm状态", "openmm进度",
+}
+
+// ultraShortStatusTrigger: single broad words that only match when the
+// entire text is very short (≤8 runes). "状态" alone → local handler;
+// "帮我总结一下当前项目状态" → Claude advice.
+var ultraShortStatusTrigger = []string{
+	"状态", "进度",
+}
+
+const ultraShortMaxRunes = 8
+
+// adviceOverridePatterns: when these appear, the user wants Claude to
+// analyze/summarize, not a simple status lookup.
+var adviceOverridePatterns = []string{
+	"帮我总结", "总结一下", "分析一下", "解释一下",
+	"帮我分析", "帮我解释", "帮我看看",
+	"详细说明", "说明一下",
+}
+
+func hasAdviceOverride(s string) bool {
+	for _, p := range adviceOverridePatterns {
+		if strings.Contains(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func isStatusQuery(text string) bool {
 	lower := strings.ToLower(text)
+	if hasQuestionPattern(lower) {
+		return false
+	}
+	if hasAdviceOverride(lower) {
+		return false
+	}
 	for _, s := range statusQueryTrigger {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	if len([]rune(strings.TrimSpace(lower))) <= ultraShortMaxRunes {
+		for _, s := range ultraShortStatusTrigger {
+			if strings.Contains(lower, s) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+var mdQueryTrigger = []string{
+	"md进度", "模拟进度", "md状态", "md跑到哪", "模拟跑到哪",
+	"gromacs进度", "gromacs状态", "md怎么样",
+	"md跑完", "md任务", "动力学跑到哪", "轨迹出来了吗",
+	"gromacs现在怎么样",
+}
+
+func isMDQuery(text string) bool {
+	lower := strings.ToLower(text)
+	for _, s := range mdQueryTrigger {
 		if strings.Contains(lower, s) {
 			return true
 		}
@@ -293,27 +436,443 @@ func isStatusQuery(text string) bool {
 	return false
 }
 
-// formatLatestStatus reads the latest run and formats a human-readable summary.
-func formatLatestStatus(root, currentRunID string) string {
-	latest := findLatestRun(filepath.Join(root, "runs"))
+var researchQueryTrigger = []string{
+	"科研任务", "科研监控", "科研状态", "科研结果",
+	"研究任务", "研究状态", "研究进度",
+	"任务监控", "运行监控",
+	"任务结果", "模拟结果",
+	"haddock状态", "haddock进度", "haddock监控",
+	"schrodinger状态", "schrodinger进度",
+	"maestro状态", "maestro进度", "glide状态",
+	"rosetta状态", "rosetta进度",
+	"gromacs状态", "gromacs进度",
+	"vina状态", "vina进度",
+	"autodock状态", "autodock进度",
+	"alphafold状态", "alphafold进度",
+	"colabfold状态", "colabfold进度",
+	"蛋白折叠状态", "蛋白折叠进度",
+	"amber状态", "amber进度",
+	"openmm状态", "openmm进度",
+}
+
+var detectorKeywords = []struct {
+	keyword  string
+	detector string
+}{
+	{"haddock", "haddock3"},
+	{"schrodinger", "schrodinger"},
+	{"maestro", "schrodinger"},
+	{"glide", "schrodinger"},
+	{"rosetta", "rosetta"},
+	{"pyrosetta", "rosetta"},
+	{"gromacs", "gromacs"},
+	{"vina", "autodock_vina"},
+	{"autodock", "autodock_vina"},
+	{"autogrid", "autodock_vina"},
+	{"python", "python_pipeline"},
+	{"alphafold", "alphafold"},
+	{"colabfold", "alphafold"},
+	{"蛋白折叠", "alphafold"},
+	{"amber", "amber_openmm"},
+	{"openmm", "amber_openmm"},
+	{"pmemd", "amber_openmm"},
+	{"sander", "amber_openmm"},
+}
+
+func extractDetectorKeyword(text string) string {
+	lower := strings.ToLower(text)
+	for _, dk := range detectorKeywords {
+		if strings.Contains(lower, dk.keyword) {
+			return dk.detector
+		}
+	}
+	return ""
+}
+
+func isResearchQuery(text string) bool {
+	lower := strings.ToLower(text)
+	for _, s := range researchQueryTrigger {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+var systemStatusTrigger = []string{
+	"系统状态", "controller状态", "当前状态",
+}
+
+func isSystemStatusQuery(text string) bool {
+	lower := strings.ToLower(text)
+	for _, s := range systemStatusTrigger {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+var resultLocationTrigger = []string{
+	"结果在哪", "文件在哪", "输出在哪", "保存到哪", "保存在哪",
+	"生成了什么文件", "产出在哪", "报告在哪",
+	"结果放在哪", "文件放在哪", "输出放在哪",
+}
+
+func isResultLocationQuery(text string) bool {
+	lower := strings.ToLower(text)
+	for _, s := range resultLocationTrigger {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatResultLocation(root, currentRunID string) string {
+	latest := findLatestRunExcluding(filepath.Join(root, "runs"), currentRunID)
 	if latest == "" {
-		return "暂无运行记录"
+		return "暂无运行记录，无法定位结果文件"
 	}
 	latestDir := filepath.Join(root, "runs", latest)
-	status := runStatus(latestDir)
+	s := readStatusJSON(latestDir)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("最新运行: %s\n状态: %s", latest, status))
+	fmt.Fprintf(&sb, "最新任务: %s\n", latest)
+	fmt.Fprintf(&sb, "状态: %s\n", humanStatus(s.Status))
+	fmt.Fprintf(&sb, "目录: %s\n", latestDir)
 
-	if data, err := os.ReadFile(filepath.Join(latestDir, "summary.md")); err == nil && len(data) > 0 {
-		sb.WriteString("\n\n概要:\n")
-		sb.WriteString(string(data))
+	outputFiles := []string{
+		"cc-answer.md", "codex-answer.md", "summary.md",
+		"incoming-question.md", "incoming-message.txt",
 	}
-	if data, err := os.ReadFile(filepath.Join(latestDir, "status.json")); err == nil {
-		sb.WriteString("\n\n详情:\n")
-		sb.WriteString(string(data))
+	var found []string
+	for _, name := range outputFiles {
+		p := filepath.Join(latestDir, name)
+		if fi, err := os.Stat(p); err == nil && fi.Size() > 0 {
+			found = append(found, name)
+		}
 	}
+	if len(found) > 0 {
+		fmt.Fprintf(&sb, "输出文件: %s\n", strings.Join(found, ", "))
+	} else {
+		sb.WriteString("输出文件: 暂无\n")
+	}
+
+	if data, err := os.ReadFile(filepath.Join(latestDir, "runner.workdir")); err == nil {
+		sb.WriteString("工作目录: " + strings.TrimSpace(string(data)) + "\n")
+	}
+
+	sb.WriteString("\n详情: 查看 " + latest)
 	return sb.String()
+}
+
+func resolveAndFormatStatus(root, currentRunID, text string) string {
+	// isMDQuery routes to gromacs only; alphafold/colabfold are handled by isResearchQuery below
+	if isMDQuery(text) {
+		return formatResearchStatusByDetector(root, "gromacs")
+	}
+	if isResearchQuery(text) {
+		if det := extractDetectorKeyword(text); det != "" {
+			return formatResearchStatusByDetector(root, det)
+		}
+		return formatResearchStatus(root)
+	}
+	if isSystemStatusQuery(text) {
+		return formatStatusShort(root)
+	}
+	return formatLatestStatus(root, currentRunID)
+}
+
+func formatResearchStatus(root string) string {
+	results, runID := loadLatestResults(root)
+	if results == nil {
+		return "暂无科研监控数据，请先执行 科研监控 获取最新扫描"
+	}
+	runDir := filepath.Join(root, "runs", runID)
+	return formatMobileSummary(results, runDir)
+}
+
+var detectorMatchAliases = map[string][]string{
+	"alphafold": {"alphafold", "colabfold"},
+	"gromacs":   {"gromacs"},
+}
+
+func detectorMatches(resultDetector, filterDetector string) bool {
+	rLower := strings.ToLower(resultDetector)
+	aliases := detectorMatchAliases[filterDetector]
+	if len(aliases) == 0 {
+		aliases = []string{filterDetector}
+	}
+	for _, alias := range aliases {
+		if rLower == alias || strings.Contains(rLower, alias) {
+			return true
+		}
+	}
+	return false
+}
+
+func formatResearchStatusByDetector(root, detector string) string {
+	results, runID := loadLatestResults(root)
+	if results == nil {
+		return "暂无科研监控数据"
+	}
+	var filtered []ResearchStatus
+	for _, r := range results {
+		if detectorMatches(r.Detector, detector) {
+			filtered = append(filtered, r)
+		}
+	}
+	label := detectorShortName(detector)
+	if len(filtered) == 0 {
+		return "暂无 " + label + " 监控数据"
+	}
+	runDir := filepath.Join(root, "runs", runID)
+	return formatMobileSummary(filtered, runDir, label)
+}
+
+func humanStatus(status string) string {
+	switch status {
+	case "accepted", "queued", "pending":
+		return "已接收"
+	case "running", "in_progress":
+		return "运行中"
+	case "done", "completed", "success":
+		return "已完成"
+	case "failed", "error":
+		return "失败"
+	case "cancelled", "canceled":
+		return "已取消"
+	case "confirming":
+		return "等待确认"
+	default:
+		if status == "" {
+			return "未知"
+		}
+		return status
+	}
+}
+
+func formatLatestStatus(root, currentRunID string) string {
+	runsRoot := filepath.Join(root, "runs")
+	latest := findLatestMeaningfulRun(runsRoot, currentRunID)
+	if latest == "" {
+		if brief := briefResearchSummary(root); brief != "" {
+			return brief + "\n详情: 科研监控"
+		}
+		return "暂无运行记录"
+	}
+	latestDir := filepath.Join(runsRoot, latest)
+	s := readStatusJSON(latestDir)
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "最新任务: %s\n", latest)
+	fmt.Fprintf(&sb, "状态: %s\n", humanStatus(s.Status))
+	if s.Stage != "" && s.Stage != s.Status {
+		fmt.Fprintf(&sb, "阶段: %s\n", s.Stage)
+	}
+
+	for _, name := range []string{"incoming-question.md", "incoming-message.txt"} {
+		if data, err := os.ReadFile(filepath.Join(latestDir, name)); err == nil {
+			q := sanitizeQuestionPreview(strings.TrimSpace(string(data)))
+			if q != "" {
+				fmt.Fprintf(&sb, "问题: %s\n", q)
+			}
+			break
+		}
+	}
+
+	ts := s.UpdatedAt
+	if ts == "" {
+		ts = s.StartedAt
+	}
+	if t, err := time.Parse(time.RFC3339, ts); err == nil {
+		fmt.Fprintf(&sb, "更新: %s\n", humanDuration(t))
+	}
+
+	if brief := briefResearchSummary(root); brief != "" {
+		sb.WriteString("\n")
+		sb.WriteString(brief)
+	}
+
+	sb.WriteString("\n详情: 查看 / 科研状态")
+	return sb.String()
+}
+
+func findLatestMeaningfulRun(runsRoot, excludeID string) string {
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		return ""
+	}
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() || !runIDPattern.MatchString(e.Name()) || e.Name() == excludeID {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(runsRoot, e.Name(), "is-status-query")); err == nil {
+			continue
+		}
+		runDir := filepath.Join(runsRoot, e.Name())
+		s := readStatusJSON(runDir)
+		if s.Status == "confirming" {
+			continue
+		}
+		dirs = append(dirs, e.Name())
+	}
+	if len(dirs) == 0 {
+		return ""
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
+	return dirs[0]
+}
+
+var pastedCommandPrefixes = []string{
+	"get-content", "select-object", "set-location", "write-output",
+	"powershell", "cmd ", "cmd.exe",
+	"cat ", "grep ", "ls ", "cd ", "dir ",
+	"git ", "docker ", "npm ", "pip ",
+	"c:\\", "C:\\", "g:\\", "G:\\",
+}
+
+func looksLikePastedCommand(q string) bool {
+	lower := strings.ToLower(q)
+	for _, p := range pastedCommandPrefixes {
+		if strings.HasPrefix(lower, strings.ToLower(p)) {
+			return true
+		}
+	}
+	if strings.Contains(q, "\\>") || strings.Contains(q, "$ ") {
+		return true
+	}
+	return false
+}
+
+func sanitizeQuestionPreview(q string) string {
+	if hasPastedOutput(q) {
+		return "命令输出诊断"
+	}
+	if looksLikePastedCommand(q) {
+		return "命令/路径查询"
+	}
+	if len(q) > 80 {
+		q = q[:80] + "..."
+	}
+	return q
+}
+
+func briefResearchSummary(root string) string {
+	results, _ := loadLatestResults(root)
+	if len(results) == 0 {
+		return ""
+	}
+	detectorCounts := map[string][2]int{} // [total, running]
+	for _, r := range results {
+		if r.Bucket != "" {
+			continue // skip archived/historical
+		}
+		name := detectorLabel(r.Detector)
+		counts := detectorCounts[name]
+		counts[0]++
+		if r.State == "running" {
+			counts[1]++
+		}
+		detectorCounts[name] = counts
+	}
+	if len(detectorCounts) == 0 {
+		return ""
+	}
+	var parts []string
+	for name, c := range detectorCounts {
+		if c[1] > 0 {
+			parts = append(parts, fmt.Sprintf("%s %d个(%d运行中)", name, c[0], c[1]))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s %d个", name, c[0]))
+		}
+	}
+	return "科研任务: " + strings.Join(parts, ", ")
+}
+
+func detectorLabel(d string) string {
+	switch d {
+	case "gromacs":
+		return "GROMACS"
+	case "schrodinger":
+		return "Schrödinger"
+	case "python":
+		return "Python"
+	case "r":
+		return "R"
+	case "autodock_vina":
+		return "AutoDock/Vina"
+	case "alphafold":
+		return "AlphaFold/ColabFold"
+	case "amber_openmm":
+		return "Amber/OpenMM"
+	case "docker":
+		return "Docker"
+	default:
+		return d
+	}
+}
+
+type routeLog struct {
+	Ts          string `json:"ts"`
+	TextPreview string `json:"text_preview"`
+	TextHash    string `json:"text_hash"`
+	Intent      string `json:"intent"`
+	Handler     string `json:"handler"`
+	Mode        string `json:"mode"`
+	RunID       string `json:"run_id"`
+	Topic       string `json:"topic"`
+	Detector    string `json:"detector,omitempty"`
+}
+
+func logRoute(root, rawText, intent, handler, mode, runID, detector string) {
+	preview := rawText
+	if len(preview) > 80 {
+		preview = preview[:80] + "..."
+	}
+	topic := "general"
+	switch detector {
+	case "md_status":
+		topic = "md"
+	case "research_status":
+		topic = "research"
+	case "system_status":
+		topic = "system"
+	case "status":
+		topic = "latest_status"
+	case "result_location":
+		topic = "result_location"
+	}
+	if intent == "execute_request" {
+		topic = "execute"
+	}
+	if handler == "claude_runner" && mode == "advice" {
+		topic = "advice"
+	}
+
+	h := sha256.Sum256([]byte(rawText))
+	entry := routeLog{
+		Ts:          time.Now().UTC().Format(time.RFC3339),
+		TextPreview: preview,
+		TextHash:    fmt.Sprintf("sha256:%.8x", h),
+		Intent:      intent,
+		Handler:     handler,
+		Mode:        mode,
+		RunID:       runID,
+		Topic:       topic,
+		Detector:    detector,
+	}
+	data, _ := json.Marshal(entry)
+	path := filepath.Join(root, "runs", "route.jsonl")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.Write(data)
+	f.Write([]byte("\n"))
 }
 
 func loadOrCreateSession(path, sessionID string) sessionMeta {

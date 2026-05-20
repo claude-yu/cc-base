@@ -148,15 +148,24 @@ func findLatestRunByKind(runsRoot, kind string) string {
 }
 
 func findLatestRun(runsRoot string) string {
+	return findLatestRunExcluding(runsRoot, "")
+}
+
+func findLatestRunExcluding(runsRoot, excludeID string) string {
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
 		return ""
 	}
 	var dirs []string
 	for _, e := range entries {
-		if e.IsDir() && runIDPattern.MatchString(e.Name()) {
-			dirs = append(dirs, e.Name())
+		if !e.IsDir() || !runIDPattern.MatchString(e.Name()) || e.Name() == excludeID {
+			continue
 		}
+		// Skip status query runs (they have an is-status-query marker)
+		if _, err := os.Stat(filepath.Join(runsRoot, e.Name(), "is-status-query")); err == nil {
+			continue
+		}
+		dirs = append(dirs, e.Name())
 	}
 	if len(dirs) == 0 {
 		return ""
@@ -302,28 +311,26 @@ func findActiveRuns(runsRoot string) []runSummary {
 }
 
 // cmdStatusShort shows a condensed 3-line status for mobile screens.
-func cmdStatusShort(root string) {
+func formatStatusShort(root string) string {
 	runsRoot := filepath.Join(root, "runs")
 	p := readActiveProject(root)
+	var sb strings.Builder
 
-	// Line 1: project + workdir
-	fmt.Printf("📂 %s  %s\n", p.Name, p.WorkDir)
+	fmt.Fprintf(&sb, "📂 %s  %s\n", p.Name, p.WorkDir)
 
-	// Line 2: active tasks + queue
 	active := findActiveRuns(runsRoot)
 	queueEntries := readQueue(root)
 	if len(active) > 0 {
 		latest := active[0]
-		fmt.Printf("▶ 活动 %d 个 | %s (%s)", len(active), latest.Stage, latest.UpdatedAgo)
+		fmt.Fprintf(&sb, "▶ 活动 %d 个 | %s (%s)", len(active), latest.Stage, latest.UpdatedAgo)
 	} else {
-		fmt.Printf("▶ 活动 0 个")
+		fmt.Fprintf(&sb, "▶ 活动 0 个")
 	}
 	if len(queueEntries) > 0 {
-		fmt.Printf(" | 排队 %d", len(queueEntries))
+		fmt.Fprintf(&sb, " | 排队 %d", len(queueEntries))
 	}
-	fmt.Println()
+	sb.WriteString("\n")
 
-	// Line 3: last completed task
 	latestDone := findLatestCompletedRun(runsRoot)
 	if latestDone.RunID != "" {
 		result := latestDone.Status
@@ -334,10 +341,15 @@ func cmdStatusShort(root string) {
 			}
 			result += " " + q
 		}
-		fmt.Printf("✓ 最近完成: %s (%s)\n", result, latestDone.UpdatedAgo)
+		fmt.Fprintf(&sb, "✓ 最近完成: %s (%s)\n", result, latestDone.UpdatedAgo)
 	} else {
-		fmt.Println("✓ 最近完成: 无")
+		sb.WriteString("✓ 最近完成: 无\n")
 	}
+	return sb.String()
+}
+
+func cmdStatusShort(root string) {
+	fmt.Print(formatStatusShort(root))
 }
 
 func findLatestCompletedRun(runsRoot string) runSummary {
