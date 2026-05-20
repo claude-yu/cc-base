@@ -59,8 +59,15 @@ func main() {
 		usage()
 	}
 	cmd := os.Args[1]
-	root := resolveControllerRoot()
 	args := os.Args[2:]
+
+	// review doesn't need controller root — handle before resolveControllerRoot().
+	if cmd == "review" {
+		cmdReview(args)
+		return
+	}
+
+	root := resolveControllerRoot()
 
 	switch cmd {
 	case "ask-cc":
@@ -182,6 +189,10 @@ Commands:
   cancel [RunId]          Cancel a running task (omit RunId to cancel latest)
   project                 Show active project info
   monitor                 Scan running tasks for stuck/zombie state
+  review                Review a diff via independent LLM
+           --backend <name>     Backend: deepseek, glm, openai (required)
+           [--file <path>]      Read diff from file (default: stdin)
+           [--format json]      Output format (default: json)
   research-monitor        Scan research project for job status (Python/R/GROMACS)
            [--detector <name>]  Filter to specific detector
   status                  Show condensed status (default, mobile-friendly)
