@@ -439,6 +439,9 @@ func printJSONError(code, message string) {
 }
 
 func printJSONResults(results []ResearchStatus, runID, filter string) {
+	if results == nil {
+		results = []ResearchStatus{}
+	}
 	out := MonitorOutput{
 		Scan: MonitorScan{
 			RunID:          runID,

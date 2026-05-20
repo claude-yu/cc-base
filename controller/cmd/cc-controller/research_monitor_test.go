@@ -270,3 +270,26 @@ func TestPrintJSONResults_UsesMonitorOutputSchema(t *testing.T) {
 		}
 	}
 }
+
+func TestPrintJSONResults_NilTasksBecomesEmptyArray(t *testing.T) {
+	var results []ResearchStatus
+	if results == nil {
+		results = []ResearchStatus{}
+	}
+	out := MonitorOutput{
+		Scan:    MonitorScan{RunID: "run-nil", TotalTasks: 0},
+		Summary: buildSummaryFromResults(results),
+		Tasks:   results,
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+	s := string(data)
+	if strings.Contains(s, `"tasks":null`) {
+		t.Errorf("nil results must serialize as [], got null")
+	}
+	if !strings.Contains(s, `"tasks":[]`) {
+		t.Errorf("expected tasks:[], got %s", s)
+	}
+}
