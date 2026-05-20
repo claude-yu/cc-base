@@ -13,8 +13,28 @@ import (
 
 const retryPrompt = "Your previous response was not valid JSON. Please respond with ONLY a JSON object matching the ReviewReport schema. No markdown, no explanation."
 
+type reviewPreset struct {
+	defaultBackend CodexBackend
+	systemPrompt   string
+}
+
+var reviewPresets = map[string]reviewPreset{
+	"security": {
+		defaultBackend: CodexBackendDeepSeek,
+		systemPrompt:   reviewPromptSecurity,
+	},
+	"routing": {
+		defaultBackend: CodexBackendGLM,
+		systemPrompt:   reviewPromptRouting,
+	},
+	"general": {
+		defaultBackend: CodexBackendGLM,
+		systemPrompt:   reviewPromptGeneral,
+	},
+}
+
 func cmdReview(args []string) {
-	var backend, file, format string
+	var backend, file, format, preset string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--backend":
@@ -32,22 +52,45 @@ func cmdReview(args []string) {
 			if i < len(args) {
 				format = args[i]
 			}
+		case "--preset":
+			i++
+			if i < len(args) {
+				preset = args[i]
+			}
 		}
 	}
 	if format == "" {
 		format = "json"
 	}
 
-	if backend == "" {
-		fmt.Fprintln(os.Stderr, "error: --backend is required (deepseek, glm, openai)")
+	// Resolve preset
+	prompt := reviewSystemPrompt // default (same as current behavior)
+	var defaultBE CodexBackend
+	if preset != "" {
+		p, ok := reviewPresets[preset]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "error: unknown preset %q (valid: security, routing, general)\n", preset)
+			os.Exit(1)
+		}
+		prompt = p.systemPrompt
+		defaultBE = p.defaultBackend
+	}
+
+	// Backend: explicit --backend > preset default > required
+	var be CodexBackend
+	if backend != "" {
+		be = CodexBackend(backend)
+	} else if defaultBE != "" {
+		be = defaultBE
+	} else {
+		fmt.Fprintln(os.Stderr, "error: --backend is required (deepseek, glm, openai) or use --preset")
 		os.Exit(1)
 	}
 
-	be := CodexBackend(backend)
 	switch be {
 	case CodexBackendDeepSeek, CodexBackendGLM, CodexBackendOpenAI:
 	default:
-		fmt.Fprintf(os.Stderr, "error: unknown backend %q (valid: deepseek, glm, openai)\n", backend)
+		fmt.Fprintf(os.Stderr, "error: unknown backend %q (valid: deepseek, glm, openai)\n", string(be))
 		os.Exit(1)
 	}
 
@@ -77,7 +120,7 @@ func cmdReview(args []string) {
 		os.Exit(1)
 	}
 
-	raw, err := callReviewBackend(trimmed, be)
+	raw, err := callReviewBackend(trimmed, be, prompt)
 	if err != nil {
 		outputJSON(errorReport(fmt.Sprintf("backend call failed: %v", err)))
 		os.Exit(1)
@@ -85,7 +128,7 @@ func cmdReview(args []string) {
 
 	report, err := extractReviewJSON(raw)
 	if err != nil {
-		raw2, err2 := callReviewBackendRetry(trimmed, raw, be)
+		raw2, err2 := callReviewBackendRetry(trimmed, raw, be, prompt)
 		if err2 != nil {
 			outputJSON(errorReport(fmt.Sprintf("retry backend call failed: %v", err2)))
 			os.Exit(1)
@@ -132,16 +175,116 @@ Response format (JSON only, no markdown fences):
   ]
 }`
 
-func callReviewBackend(diff string, backend CodexBackend) (string, error) {
+const reviewPromptSecurity = `You are an independent security-focused code reviewer.
+
+Rules:
+- Do not trust any executor summary.
+- Review only the provided diff.
+- Return JSON only.
+- Do not include markdown.
+- Do not speculate beyond evidence.
+- If evidence is insufficient, use WARN or BLOCKED.
+
+Security checks:
+- Token, credential, API key, and private path leakage.
+- Write operations in read-only scientific monitor paths.
+- Dangerous flags, shell execution, or command injection.
+- JSON schema compatibility breaks in research-monitor output.
+- Audit or logging bypass.
+- Prefer false negatives over dangerous false positives in execute routing.
+
+Response format (JSON only, no markdown fences):
+{
+  "verdict": "PASS|WARN|FAIL|BLOCKED|ERROR",
+  "summary": "one-line summary",
+  "findings": [
+    {
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+      "file": "filename",
+      "line": 0,
+      "title": "short title",
+      "evidence": "what you found",
+      "recommendation": "what to do"
+    }
+  ]
+}`
+
+const reviewPromptRouting = `You are an independent code reviewer specializing in message routing and classification.
+
+Rules:
+- Do not trust any executor summary.
+- Review only the provided diff.
+- Return JSON only.
+- Do not include markdown.
+- Do not speculate beyond evidence.
+- If evidence is insufficient, use WARN or BLOCKED.
+
+Routing checks:
+- Do not approve broad Chinese routing triggers such as 看看, 结果, 怎么样, 试试, 弄弄.
+- Verify execute / readonly / advice classification is correct.
+- Check detector alias patterns are specific enough (no single-char or overly broad matches).
+- Flag false positive risks in trigger lists.
+- Prefer false negatives over dangerous false positives in execute routing.
+
+Response format (JSON only, no markdown fences):
+{
+  "verdict": "PASS|WARN|FAIL|BLOCKED|ERROR",
+  "summary": "one-line summary",
+  "findings": [
+    {
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+      "file": "filename",
+      "line": 0,
+      "title": "short title",
+      "evidence": "what you found",
+      "recommendation": "what to do"
+    }
+  ]
+}`
+
+const reviewPromptGeneral = `You are an independent code reviewer.
+
+Rules:
+- Do not trust any executor summary.
+- Review only the provided diff.
+- Return JSON only.
+- Do not include markdown.
+- Do not speculate beyond evidence.
+- If evidence is insufficient, use WARN or BLOCKED.
+
+General checks:
+- Code correctness and error handling.
+- Test coverage for new logic.
+- Maintainability and readability.
+- Do not approve incompatible research-monitor JSON schema changes.
+- Treat token, credential, and private path leakage as security findings.
+
+Response format (JSON only, no markdown fences):
+{
+  "verdict": "PASS|WARN|FAIL|BLOCKED|ERROR",
+  "summary": "one-line summary",
+  "findings": [
+    {
+      "severity": "CRITICAL|HIGH|MEDIUM|LOW",
+      "file": "filename",
+      "line": 0,
+      "title": "short title",
+      "evidence": "what you found",
+      "recommendation": "what to do"
+    }
+  ]
+}`
+
+func callReviewBackend(diff string, backend CodexBackend, systemPrompt string) (string, error) {
 	return doReviewCall([]chatMessage{
-		{Role: "system", Content: reviewSystemPrompt},
+		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: diff},
 	}, backend)
 }
 
-func callReviewBackendRetry(diff, prevResponse string, backend CodexBackend) (string, error) {
+func callReviewBackendRetry(diff, prevResponse string, backend CodexBackend, systemPrompt string) (string, error) {
 	return doReviewCall([]chatMessage{
-		{Role: "system", Content: reviewSystemPrompt},
+		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: diff},
 		{Role: "assistant", Content: prevResponse},
 		{Role: "user", Content: retryPrompt},

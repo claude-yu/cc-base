@@ -190,7 +190,9 @@ Commands:
   project                 Show active project info
   monitor                 Scan running tasks for stuck/zombie state
   review                Review a diff via independent LLM
-           --backend <name>     Backend: deepseek, glm, openai (required)
+           --backend <name>     Backend: deepseek, glm, openai
+           [--preset <name>]    Preset: security, routing, general
+                                (provides default backend + focused prompt)
            [--file <path>]      Read diff from file (default: stdin)
            [--format json]      Output format (default: json)
   research-monitor        Scan research project for job status (Python/R/GROMACS)

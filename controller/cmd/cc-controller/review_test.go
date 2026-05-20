@@ -177,3 +177,71 @@ func TestReviewReportJSON(t *testing.T) {
 		t.Errorf("tokens_used = %d, want 500", roundtrip.TokensUsed)
 	}
 }
+
+func TestReviewPresets(t *testing.T) {
+	tests := []struct {
+		name          string
+		wantBackend   CodexBackend
+		wantPromptHas string // substring that must be in the prompt
+		wantPromptNot string // substring that must NOT be in the prompt
+	}{
+		{
+			name:          "security",
+			wantBackend:   CodexBackendDeepSeek,
+			wantPromptHas: "Token, credential, API key",
+			wantPromptNot: "broad Chinese routing triggers",
+		},
+		{
+			name:          "routing",
+			wantBackend:   CodexBackendGLM,
+			wantPromptHas: "broad Chinese routing triggers",
+			wantPromptNot: "shell execution",
+		},
+		{
+			name:          "general",
+			wantBackend:   CodexBackendGLM,
+			wantPromptHas: "Code correctness",
+			wantPromptNot: "shell execution",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, ok := reviewPresets[tc.name]
+			if !ok {
+				t.Fatalf("preset %q not found in reviewPresets", tc.name)
+			}
+			if p.defaultBackend != tc.wantBackend {
+				t.Errorf("preset %q default backend = %q, want %q", tc.name, p.defaultBackend, tc.wantBackend)
+			}
+			if !strings.Contains(p.systemPrompt, tc.wantPromptHas) {
+				t.Errorf("preset %q prompt missing %q", tc.name, tc.wantPromptHas)
+			}
+			if tc.wantPromptNot != "" && strings.Contains(p.systemPrompt, tc.wantPromptNot) {
+				t.Errorf("preset %q prompt should NOT contain %q", tc.name, tc.wantPromptNot)
+			}
+		})
+	}
+}
+
+func TestReviewPresetsHaveResponseFormat(t *testing.T) {
+	for name, p := range reviewPresets {
+		if !strings.Contains(p.systemPrompt, `"verdict"`) {
+			t.Errorf("preset %q prompt missing response format (no verdict field)", name)
+		}
+		if !strings.Contains(p.systemPrompt, `"findings"`) {
+			t.Errorf("preset %q prompt missing response format (no findings field)", name)
+		}
+	}
+	// Also check the default prompt
+	if !strings.Contains(reviewSystemPrompt, `"verdict"`) {
+		t.Error("default reviewSystemPrompt missing response format")
+	}
+}
+
+func TestPresetUnknown(t *testing.T) {
+	_, ok := reviewPresets["nonexistent"]
+	if ok {
+		t.Error("expected nonexistent preset to not be in reviewPresets")
+	}
+}
