@@ -47,17 +47,6 @@ func writeActiveProject(root string, p ActiveProject) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// resolveSessionID prepends the project ID to the session name,
-// giving each project independent session context.
-func resolveSessionID(root, sessionID string) string {
-	project := readActiveProject(root)
-	base := sessionID
-	if base == "" || base == "default" {
-		base = "default"
-	}
-	return project.ProjectID + "-" + base
-}
-
 // sanitizeProjectID replaces characters outside [a-zA-Z0-9._-] with _.
 func sanitizeProjectID(s string) string {
 	var b strings.Builder
@@ -83,7 +72,7 @@ func cmdProject(root string) {
 //   - If the arg is a full path (contains \ or /), use it directly.
 //   - If it's a name, resolve relative to the parent of the current work_dir.
 //   - If no active_project.json exists, relative names are rejected (require full path).
-func cmdSwitchProject(root, target string) {
+func cmdSwitchProject(root, target, platform, chatID string) {
 	current := readActiveProject(root)
 
 	var workDir string
@@ -126,6 +115,15 @@ func cmdSwitchProject(root, target string) {
 		fmt.Fprintf(os.Stderr, "写入项目配置失败: %s\n", err)
 		os.Exit(1)
 	}
+
+	if chatID != "" {
+		updateBinding(root, platform, chatID, ChatBinding{
+			ProjectID: p.ProjectID,
+			WorkDir:   p.WorkDir,
+			SessionID: p.ProjectID + "-default",
+		})
+	}
+
 	session := p.ProjectID + "-default"
 	fmt.Printf("已切换项目\n")
 	fmt.Printf("Name: %s\n", p.Name)

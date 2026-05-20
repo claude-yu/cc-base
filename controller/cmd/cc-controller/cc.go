@@ -55,20 +55,25 @@ func runCC(root, runID, sessionID, mode string) {
 
 	modePrompt := buildModePrompt(mode)
 
+	projectContext := ""
+	if isProjectContextQuery(string(question)) {
+		projectContext = buildProjectMemoryContext(root, workDir)
+	}
+
 	var fullInput string
 	if sessionID != "" {
 		sessionNote := "\n\n注意：你当前运行在 cc-controller session-aware runner 中。当前 session 的最近对话会被注入上下文，所以你可以记住本 session 内前文。但这不是永久记忆；不要说「新会话不会保留」作为默认免责声明。只有用户要求永久记忆时，再建议写入 CLAUDE.md / memory。"
 		context := buildSessionContext(root, runID, sessionID, string(question))
-		fullInput = modePrompt + sessionNote + "\n\n" + context
+		fullInput = modePrompt + sessionNote + projectContext + "\n\n" + context
 	} else {
-		fullInput = modePrompt + "\n\nuser: " + string(question)
+		fullInput = modePrompt + projectContext + "\n\nuser: " + string(question)
 	}
 
 	var claudeArgs []string
 	if mode == "execute" {
 		claudeArgs = []string{"-p", "--dangerously-skip-permissions", "--output-format", "text", "--no-session-persistence"}
 	} else {
-		claudeArgs = []string{"-p", "--system-prompt", modePrompt, "--output-format", "text", "--no-session-persistence"}
+		claudeArgs = []string{"-p", "--dangerously-skip-permissions", "--system-prompt", modePrompt, "--output-format", "text", "--no-session-persistence"}
 	}
 	if m := os.Getenv("CC_MODEL"); m != "" {
 		claudeArgs = append(claudeArgs, "--model", m)

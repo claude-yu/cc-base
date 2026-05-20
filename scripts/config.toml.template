@@ -695,6 +695,8 @@ command = "/科研监控"
 admin_from = "YOUR_ADMIN_ID"
 name = "cc"
 reset_on_idle_mins = 0
+# default_command = "/cc {{message}}"  # route plain text through /cc command (requires fork)
+# unknown_slash = "error"              # block unknown /commands from reaching agent
 
 [projects.agent]
 type = "claudecode"

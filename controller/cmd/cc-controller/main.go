@@ -138,8 +138,24 @@ func main() {
 			cmdStatusShort(root)
 		}
 	case "switch":
-		mustHaveArgs(args, 1, "usage: cc-controller switch <project-name|path>")
-		cmdSwitchProject(root, args[0])
+		mustHaveArgs(args, 1, "usage: cc-controller switch <project-name|path> [--chat-id <id>] [--platform <name>]")
+		target := args[0]
+		var switchChatID, switchPlatform string
+		for i := 1; i < len(args); i++ {
+			switch args[i] {
+			case "--chat-id":
+				i++
+				if i < len(args) {
+					switchChatID = args[i]
+				}
+			case "--platform":
+				i++
+				if i < len(args) {
+					switchPlatform = args[i]
+				}
+			}
+		}
+		cmdSwitchProject(root, target, switchPlatform, switchChatID)
 	default:
 		usage()
 	}
