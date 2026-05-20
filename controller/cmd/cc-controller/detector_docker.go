@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -34,7 +35,7 @@ func isScienceImage(image string) bool {
 	return false
 }
 
-func scanDockerContainers() []ResearchStatus {
+func scanDockerContainers(root string) []ResearchStatus {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return nil
 	}
@@ -64,7 +65,39 @@ func scanDockerContainers() []ResearchStatus {
 		rs := inspectDockerContainer(c)
 		results = append(results, rs)
 	}
+
+	// Filter by root when set: only keep containers whose bind mount is under root
+	if root != "" {
+		var filtered []ResearchStatus
+		for _, rs := range results {
+			if rs.WorkDir == "" {
+				continue // no bind mount — can't prove in-scope
+			}
+			if isUnderRoot(rs.WorkDir, root) {
+				filtered = append(filtered, rs)
+			}
+		}
+		return filtered
+	}
+
 	return results
+}
+
+// isUnderRoot checks whether mount is a path under root (case-insensitive, Windows-aware).
+func isUnderRoot(mount, root string) bool {
+	if mount == "" || root == "" {
+		return false
+	}
+	normMount := strings.ToLower(filepath.Clean(mount))
+	normRoot := strings.ToLower(filepath.Clean(root))
+	// Normalize forward slashes to backslashes (Windows paths)
+	normMount = strings.ReplaceAll(normMount, "/", "\\")
+	normRoot = strings.ReplaceAll(normRoot, "/", "\\")
+	// Ensure root ends with separator so "work-9" doesn't match "work-91"
+	if !strings.HasSuffix(normRoot, "\\") {
+		normRoot += "\\"
+	}
+	return normMount == strings.TrimSuffix(normRoot, "\\") || strings.HasPrefix(normMount, normRoot)
 }
 
 func inspectDockerContainer(c dockerContainer) ResearchStatus {

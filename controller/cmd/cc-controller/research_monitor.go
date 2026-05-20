@@ -120,7 +120,7 @@ func doFullScan(root, filterDetector, outputFormat string) {
 	results := scanProject(workDir, scanDepth, filterDetector)
 
 	if filterDetector == "" || strings.HasPrefix(filterDetector, "docker") {
-		dockerResults := scanDockerContainers()
+		dockerResults := scanDockerContainers(workDir)
 		results = append(results, dockerResults...)
 	}
 
