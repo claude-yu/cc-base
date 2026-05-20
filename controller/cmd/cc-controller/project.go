@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -36,7 +37,7 @@ func readActiveProject(root string) ActiveProject {
 	return ActiveProject{
 		Name:      filepath.Base(workDir),
 		WorkDir:   workDir,
-		ProjectID: sanitizeProjectID(filepath.Base(workDir)),
+		ProjectID: sanitizeProjectID(workDir),
 	}
 }
 
@@ -47,8 +48,7 @@ func writeActiveProject(root string, p ActiveProject) error {
 	return os.WriteFile(path, data, 0644)
 }
 
-// sanitizeProjectID replaces characters outside [a-zA-Z0-9._-] with _.
-func sanitizeProjectID(s string) string {
+func sanitizeSlug(s string) string {
 	var b strings.Builder
 	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-' || r == '_' {
@@ -58,6 +58,39 @@ func sanitizeProjectID(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func isAllUnderscores(s string) bool {
+	for _, r := range s {
+		if r != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+func pathHash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return fmt.Sprintf("%x", h[:4])
+}
+
+// sanitizeProjectID produces a stable ASCII project ID from a directory name.
+// If the basename is pure non-ASCII (e.g. Chinese), falls back to parent slug + path hash.
+func sanitizeProjectID(fullPath string) string {
+	base := filepath.Base(fullPath)
+	slug := sanitizeSlug(base)
+
+	if slug != "" && !isAllUnderscores(slug) {
+		return slug
+	}
+
+	parent := sanitizeSlug(filepath.Base(filepath.Dir(fullPath)))
+	hash := pathHash(fullPath)
+
+	if parent != "" && !isAllUnderscores(parent) {
+		return parent + "-" + hash
+	}
+	return "project-" + hash
 }
 
 // cmdProject shows the active project info.
@@ -109,7 +142,7 @@ func cmdSwitchProject(root, target, platform, chatID string) {
 	p := ActiveProject{
 		Name:      filepath.Base(workDir),
 		WorkDir:   workDir,
-		ProjectID: sanitizeProjectID(filepath.Base(workDir)),
+		ProjectID: sanitizeProjectID(workDir),
 	}
 	if err := writeActiveProject(root, p); err != nil {
 		fmt.Fprintf(os.Stderr, "写入项目配置失败: %s\n", err)

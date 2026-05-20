@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -81,6 +82,52 @@ func TestReadInputStdinTrims(t *testing.T) {
 	want := "padded body\nkept line" // leading/trailing whitespace stripped
 	if got != want {
 		t.Fatalf("stdin readInput = %q, want %q (TrimSpace strips edges)", got, want)
+	}
+}
+
+func TestSanitizeProjectID_ASCII(t *testing.T) {
+	got := sanitizeProjectID(`E:\projects\my-app`)
+	if got != "my-app" {
+		t.Fatalf("ASCII dir: got %q, want %q", got, "my-app")
+	}
+}
+
+func TestSanitizeProjectID_ChineseDir(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("backslash path test only meaningful on Windows")
+	}
+	got := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	if got == "____" || got == "" {
+		t.Fatalf("Chinese dir produced degenerate ID: %q", got)
+	}
+	if !strings.Contains(got, "work_12") {
+		t.Fatalf("expected parent slug in ID, got %q", got)
+	}
+}
+
+func TestSanitizeProjectID_SamePathSameID(t *testing.T) {
+	a := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	b := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	if a != b {
+		t.Fatalf("same path produced different IDs: %q vs %q", a, b)
+	}
+}
+
+func TestSanitizeProjectID_DifferentPathsDifferentIDs(t *testing.T) {
+	a := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	b := sanitizeProjectID(`G:\proteinwork\work_13\虚拟敲除`)
+	if a == b {
+		t.Fatalf("different paths produced same ID: %q", a)
+	}
+}
+
+func TestSanitizeProjectID_MixedName(t *testing.T) {
+	got := sanitizeProjectID(`E:\projects\vko_虚拟敲除`)
+	if got != "vko___" && !strings.HasPrefix(got, "vko_") {
+		t.Fatalf("mixed name: expected ASCII prefix preserved, got %q", got)
+	}
+	if strings.TrimRight(got, "_") == "" {
+		t.Fatalf("mixed name produced all underscores: %q", got)
 	}
 }
 
