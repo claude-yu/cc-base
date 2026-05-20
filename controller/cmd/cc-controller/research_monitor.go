@@ -882,6 +882,8 @@ func detectorShortName(det string) string {
 		return "Amber/OpenMM"
 	case "schrodinger":
 		return "Schrodinger"
+	case "gaussian":
+		return "Gaussian"
 	case "python_pipeline":
 		return "Python"
 	case "r_pipeline":

@@ -189,6 +189,8 @@ func TestIsResearchQuery(t *testing.T) {
 		"蛋白折叠状态", "蛋白折叠进度",
 		"amber状态", "amber进度",
 		"openmm状态", "openmm进度",
+		"gaussian状态", "gaussian进度",
+		"g16状态", "g09进度",
 	}
 	negative := []string{
 		"查看状态", "系统状态", "cc状态", "看看结果",
@@ -261,6 +263,11 @@ func TestExtractDetectorKeyword(t *testing.T) {
 		{"pmemd运行状态", "amber_openmm"},
 		{"sander怎么样了", "amber_openmm"},
 		{"科研监控 amber", "amber_openmm"},
+		{"gaussian状态", "gaussian"},
+		{"g16进度", "gaussian"},
+		{"g09状态", "gaussian"},
+		{"gjf文件检查", "gaussian"},
+		{"科研监控 gaussian", "gaussian"},
 		{"科研监控", ""},
 		{"科研状态", ""},
 		{"看看结果", ""},
@@ -284,6 +291,8 @@ func TestToolSpecificStatusRouting(t *testing.T) {
 		"alphafold状态", "colabfold进度",
 		"amber状态", "amber进度",
 		"openmm状态", "openmm进度",
+		"gaussian状态", "gaussian进度",
+		"g16状态", "g09进度",
 	}
 	for _, s := range positive {
 		if !isStatusQuery(s) {
@@ -312,6 +321,9 @@ func TestToolSpecificStatusRouting(t *testing.T) {
 		"amber原理",
 		"openmm怎么安装",
 		"amber和gromacs区别",
+		"gaussian原理",
+		"g16怎么安装",
+		"gaussian和orca的区别",
 	}
 	for _, s := range negative {
 		if isStatusQuery(s) {
@@ -333,6 +345,7 @@ func TestSlashNoSlashDetectorEquivalence(t *testing.T) {
 		{[]string{"科研监控 vina", "vina状态", "vina进度"}, "autodock_vina"},
 		{[]string{"alphafold状态", "alphafold进度", "colabfold状态", "colabfold进度", "蛋白折叠状态", "蛋白折叠进度"}, "alphafold"},
 		{[]string{"amber状态", "amber进度", "openmm状态", "openmm进度", "科研监控 pmemd"}, "amber_openmm"},
+		{[]string{"gaussian状态", "gaussian进度", "g16状态", "g09进度", "科研监控 gaussian"}, "gaussian"},
 	}
 	for _, g := range groups {
 		for _, input := range g.inputs {

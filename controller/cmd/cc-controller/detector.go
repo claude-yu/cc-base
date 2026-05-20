@@ -48,6 +48,7 @@ func allDetectors() []Detector {
 		&autodockVinaDetector{},
 		&alphafoldDetector{},
 		&amberOpenMMDetector{},
+		&gaussianDetector{},
 		&pythonDetector{},
 		&rDetector{},
 		&genericCLIDetector{},

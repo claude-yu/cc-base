@@ -368,6 +368,9 @@ var statusQueryTrigger = []string{
 	"蛋白折叠状态", "蛋白折叠进度",
 	"amber状态", "amber进度",
 	"openmm状态", "openmm进度",
+	"gaussian状态", "gaussian进度",
+	"g16状态", "g16进度",
+	"g09状态", "g09进度",
 }
 
 // ultraShortStatusTrigger: single broad words that only match when the
@@ -453,6 +456,9 @@ var researchQueryTrigger = []string{
 	"蛋白折叠状态", "蛋白折叠进度",
 	"amber状态", "amber进度",
 	"openmm状态", "openmm进度",
+	"gaussian状态", "gaussian进度",
+	"g16状态", "g16进度",
+	"g09状态", "g09进度",
 }
 
 var detectorKeywords = []struct {
@@ -477,6 +483,10 @@ var detectorKeywords = []struct {
 	{"openmm", "amber_openmm"},
 	{"pmemd", "amber_openmm"},
 	{"sander", "amber_openmm"},
+	{"gaussian", "gaussian"},
+	{"g16", "gaussian"},
+	{"g09", "gaussian"},
+	{"gjf", "gaussian"},
 }
 
 func extractDetectorKeyword(text string) string {
@@ -808,6 +818,8 @@ func detectorLabel(d string) string {
 		return "AlphaFold/ColabFold"
 	case "amber_openmm":
 		return "Amber/OpenMM"
+	case "gaussian":
+		return "Gaussian"
 	case "docker":
 		return "Docker"
 	default:
