@@ -163,6 +163,7 @@ func TestGenericCLI_NoFalsePositiveOnSuccessLog(t *testing.T) {
 	dir := t.TempDir()
 	content := "Job started\n6 of 6 job(s) succeeded; 0 job(s) failed.\nDone.\n"
 	os.WriteFile(filepath.Join(dir, "run.log"), []byte(content), 0644)
+	os.WriteFile(filepath.Join(dir, "run.out"), []byte("output\n"), 0644)
 
 	d := &genericCLIDetector{}
 	matched, _ := d.Match(dir)

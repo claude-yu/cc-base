@@ -373,6 +373,7 @@ var statusQueryTrigger = []string{
 	"gaussian状态", "gaussian进度",
 	"g16状态", "g16进度",
 	"g09状态", "g09进度",
+	"python状态", "python进度",
 }
 
 // ultraShortStatusTrigger: single broad words that only match when the
@@ -463,6 +464,7 @@ var researchQueryTrigger = []string{
 	"gaussian状态", "gaussian进度",
 	"g16状态", "g16进度",
 	"g09状态", "g09进度",
+	"python状态", "python进度",
 }
 
 var detectorKeywords = []struct {
@@ -608,8 +610,12 @@ func formatResearchStatus(root string) string {
 }
 
 var detectorMatchAliases = map[string][]string{
-	"alphafold": {"alphafold", "colabfold"},
-	"gromacs":   {"gromacs"},
+	"alphafold":    {"alphafold", "colabfold"},
+	"gromacs":      {"gromacs"},
+	"schrodinger":  {"schrodinger"},
+	"amber_openmm": {"amber_openmm"},
+	"autodock_vina": {"autodock_vina"},
+	"gaussian":     {"gaussian"},
 }
 
 func detectorMatches(resultDetector, filterDetector string) bool {
@@ -812,9 +818,13 @@ func detectorLabel(d string) string {
 		return "GROMACS"
 	case "schrodinger":
 		return "Schrödinger"
-	case "python":
+	case "haddock3":
+		return "HADDOCK3"
+	case "rosetta":
+		return "Rosetta"
+	case "python_pipeline":
 		return "Python"
-	case "r":
+	case "r_pipeline":
 		return "R"
 	case "autodock_vina":
 		return "AutoDock/Vina"

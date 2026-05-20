@@ -278,6 +278,9 @@ func (d *gromacsDetector) Match(dir string) (bool, int) {
 	if score < 40 {
 		return false, 0
 	}
+	if score > 100 {
+		score = 100
+	}
 	return true, score
 }
 
@@ -839,8 +842,11 @@ func (d *genericCLIDetector) Match(dir string) (bool, int) {
 		score += 10
 	}
 
-	if score < 15 {
+	if score < 25 {
 		return false, 0
+	}
+	if score > 100 {
+		score = 100
 	}
 	return true, score
 }

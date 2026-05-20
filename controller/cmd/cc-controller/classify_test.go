@@ -191,9 +191,11 @@ func TestIsResearchQuery(t *testing.T) {
 		"openmm状态", "openmm进度",
 		"gaussian状态", "gaussian进度",
 		"g16状态", "g09进度",
+		"python状态", "python进度",
 	}
 	negative := []string{
 		"查看状态", "系统状态", "cc状态", "看看结果",
+		"controller状态",
 	}
 	for _, s := range positive {
 		if !isResearchQuery(s) {
@@ -298,6 +300,7 @@ func TestToolSpecificStatusRouting(t *testing.T) {
 		"openmm状态", "openmm进度",
 		"gaussian状态", "gaussian进度",
 		"g16状态", "g09进度",
+		"python状态", "python进度",
 	}
 	for _, s := range positive {
 		if !isStatusQuery(s) {
@@ -329,6 +332,7 @@ func TestToolSpecificStatusRouting(t *testing.T) {
 		"gaussian原理",
 		"g16怎么安装",
 		"gaussian和orca的区别",
+		"python怎么安装",
 	}
 	for _, s := range negative {
 		if isStatusQuery(s) {
