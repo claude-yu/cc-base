@@ -151,7 +151,7 @@ func callReviewBackendRetry(diff, prevResponse string, backend CodexBackend) (st
 func doReviewCall(messages []chatMessage, backend CodexBackend) (string, error) {
 	cfg := resolveAPIConfig(backend)
 	if cfg.APIKey == "" {
-		return "", fmt.Errorf("CC_CODEX_API_KEY not set for backend %q", backend)
+		return "", fmt.Errorf("API key not set for backend %q (set CC_%s_API_KEY or CC_CODEX_API_KEY)", backend, strings.ToUpper(string(backend)))
 	}
 
 	body, err := json.Marshal(chatRequest{Model: cfg.Model, Messages: messages})
@@ -180,7 +180,7 @@ func doReviewCall(messages []chatMessage, backend CodexBackend) (string, error) 
 		return "", fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API HTTP %d: %s", resp.StatusCode, string(respBytes))
+		return "", fmt.Errorf("%s", sanitizeAPIError(resp.StatusCode, respBytes))
 	}
 
 	var chatResp chatResponse

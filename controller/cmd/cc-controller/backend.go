@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -46,7 +47,9 @@ func resolveCodexBackend() CodexBackend {
 }
 
 // resolveAPIConfig returns base URL, API key, and model for the given backend.
-// Env vars CC_CODEX_API_BASE / CC_CODEX_API_KEY / CC_CODEX_MODEL override defaults.
+// Per-backend env vars (CC_OPENAI_API_KEY, CC_DEEPSEEK_API_KEY, CC_GLM_API_KEY,
+// CC_OPENAI_API_BASE, CC_DEEPSEEK_API_BASE, CC_GLM_API_BASE) take priority;
+// shared CC_CODEX_API_KEY / CC_CODEX_API_BASE / CC_CODEX_MODEL are legacy fallbacks.
 func resolveAPIConfig(backend CodexBackend) apiConfig {
 	var defaultBase, defaultModel string
 	switch backend {
@@ -61,11 +64,37 @@ func resolveAPIConfig(backend CodexBackend) apiConfig {
 		defaultModel = "glm-5"
 	}
 
-	base := os.Getenv("CC_CODEX_API_BASE")
+	// Per-backend API key, with shared CC_CODEX_API_KEY as fallback.
+	backendKeyVar := map[CodexBackend]string{
+		CodexBackendOpenAI:   "CC_OPENAI_API_KEY",
+		CodexBackendDeepSeek: "CC_DEEPSEEK_API_KEY",
+		CodexBackendGLM:      "CC_GLM_API_KEY",
+	}
+	key := ""
+	if envVar, ok := backendKeyVar[backend]; ok {
+		key = os.Getenv(envVar)
+	}
+	if key == "" {
+		key = os.Getenv("CC_CODEX_API_KEY") // legacy fallback
+	}
+
+	// Per-backend API base, with shared CC_CODEX_API_BASE as fallback.
+	backendBaseVar := map[CodexBackend]string{
+		CodexBackendOpenAI:   "CC_OPENAI_API_BASE",
+		CodexBackendDeepSeek: "CC_DEEPSEEK_API_BASE",
+		CodexBackendGLM:      "CC_GLM_API_BASE",
+	}
+	base := ""
+	if envVar, ok := backendBaseVar[backend]; ok {
+		base = os.Getenv(envVar)
+	}
+	if base == "" {
+		base = os.Getenv("CC_CODEX_API_BASE")
+	}
 	if base == "" {
 		base = defaultBase
 	}
-	key := os.Getenv("CC_CODEX_API_KEY")
+
 	model := os.Getenv("CC_CODEX_MODEL")
 	if model == "" {
 		model = defaultModel
@@ -98,7 +127,7 @@ type chatResponse struct {
 func runAPICodex(runDir, runID, question string, cfg apiConfig, backend CodexBackend) {
 	// Loud fail: missing API key.
 	if cfg.APIKey == "" {
-		errMsg := fmt.Sprintf("CC_CODEX_API_KEY not set for backend '%s'", backend)
+		errMsg := fmt.Sprintf("API key not set for backend '%s' (set CC_%s_API_KEY or CC_CODEX_API_KEY)", backend, strings.ToUpper(string(backend)))
 		os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(errMsg), 0644)
 		updateStatusJSON(runDir, "failed", "failed", 0)
 		setExitCode(runDir, 1)
@@ -200,7 +229,7 @@ If no action is needed, write:
 	os.WriteFile(filepath.Join(runDir, "codex-answer.raw.md"), respBytes, 0644)
 
 	if resp.StatusCode != http.StatusOK {
-		errMsg := fmt.Sprintf("API returned HTTP %d: %s", resp.StatusCode, string(respBytes))
+		errMsg := sanitizeAPIError(resp.StatusCode, respBytes)
 		writeAPIError(runDir, runID, backend, errMsg)
 		return
 	}
@@ -234,6 +263,30 @@ If no action is needed, write:
 		RunID: runID, Type: "completed", ExitCode: 0,
 	})
 	sendCallback(runDir, fmt.Sprintf("[Codex role: %s] 已回复 (RunId: %s)\n%s", backend, runID, answer))
+}
+
+// bearerRe matches "Bearer <token>" patterns that may be echoed in error bodies.
+var bearerRe = regexp.MustCompile(`Bearer \S+`)
+
+// sanitizeAPIError extracts a safe error string from an API error response,
+// preventing API keys or other secrets from leaking to disk/chat/logs.
+func sanitizeAPIError(statusCode int, body []byte) string {
+	// Try to extract just the error.message from a JSON error response.
+	var errResp struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &errResp) == nil && errResp.Error.Message != "" {
+		return fmt.Sprintf("API HTTP %d: %s", statusCode, errResp.Error.Message)
+	}
+	// Fallback: truncate raw body and strip potential Bearer tokens.
+	s := string(body)
+	if len(s) > 200 {
+		s = s[:200] + "...(truncated)"
+	}
+	s = bearerRe.ReplaceAllString(s, "Bearer [REDACTED]")
+	return fmt.Sprintf("API HTTP %d: %s", statusCode, s)
 }
 
 // writeAPIError writes a failure to runDir and sends callback — used by runAPICodex.
