@@ -23,13 +23,13 @@ func cmdMemoryDraft(root string, args []string) {
 	case "status", "状态":
 		cmdMemoryStatus(root)
 	default:
-		fmt.Fprintf(os.Stderr, "未知模式: %s（可用: summary, record, status）\n", mode)
+		fmt.Fprintln(os.Stderr, "未知模式（可用: summary, record, status）")
 		os.Exit(1)
 	}
 }
 
 func cmdMemoryStatus(root string) {
-	workDir := resolveProjectWorkDir()
+	workDir := resolveMemoryRoot(root)
 
 	progressPath := filepath.Join(workDir, "progress.md")
 	progressLines := 0
@@ -95,7 +95,7 @@ func cmdMemoryStatus(root string) {
 }
 
 func cmdMemoryDraftGenerate(root, mode string) {
-	workDir := resolveProjectWorkDir()
+	workDir := resolveMemoryRoot(root)
 
 	runID := genRunID("memory-draft")
 	runDir := filepath.Join(root, "runs", runID)
@@ -122,6 +122,7 @@ func cmdMemoryDraftGenerate(root, mode string) {
 	userPrompt := memoryDraftUserPrompt(mode, context)
 
 	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -141,7 +142,6 @@ func cmdMemoryDraftGenerate(root, mode string) {
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
 	}, CodexBackendGLM)
-	close(done)
 
 	if err != nil {
 		writeError(runDir, err)
@@ -149,7 +149,7 @@ func cmdMemoryDraftGenerate(root, mode string) {
 		os.Exit(1)
 	}
 
-	os.WriteFile(filepath.Join(runDir, "memory-draft.md"), []byte(resp), 0644)
+	os.WriteFile(filepath.Join(runDir, "memory-draft.md"), []byte(resp), 0600)
 
 	shortSummary := extractDraftSummary(resp, mode, runID)
 	os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(shortSummary), 0644)
@@ -158,9 +158,18 @@ func cmdMemoryDraftGenerate(root, mode string) {
 		RunID: runID, Kind: "memory-draft", Status: "completed",
 		Stage: "done", StartedAt: now, UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
+	setExitCode(runDir, 0)
+	appendEvent(runDir, eventEntry{Ts: time.Now().UTC().Format(time.RFC3339), RunID: runID, Type: "completed"})
 
 	sendCallback(runDir, shortSummary)
 	fmt.Println(shortSummary)
+}
+
+func resolveMemoryRoot(root string) string {
+	if dir := os.Getenv("CC_MEMORY_ROOT"); dir != "" {
+		return filepath.Clean(dir)
+	}
+	return filepath.Dir(root)
 }
 
 func gatherMemoryContext(root, workDir string) string {

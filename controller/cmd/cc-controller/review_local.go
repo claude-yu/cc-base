@@ -18,11 +18,11 @@ func cmdReviewLocal(root string, args []string) {
 
 	p, ok := reviewPresets[preset]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "未知 preset: %s（可用: security, routing, general）\n", preset)
+		fmt.Fprintln(os.Stderr, "未知 preset（可用: security, routing, general）")
 		os.Exit(1)
 	}
 
-	workDir := resolveProjectWorkDir()
+	workDir := resolveReviewRepoRoot(root)
 
 	diff := getLocalDiff(workDir)
 	if diff == "" {
@@ -43,11 +43,12 @@ func cmdReviewLocal(root string, args []string) {
 		RunID: runID, Kind: "review-local", Status: "running",
 		Stage: "reviewing", StartedAt: now, UpdatedAt: now,
 	})
-	os.WriteFile(filepath.Join(runDir, "review-diff.txt"), []byte(diff), 0644)
+	os.WriteFile(filepath.Join(runDir, "review-diff.txt"), []byte(diff), 0600)
 
 	sendCallback(runDir, fmt.Sprintf("⏳ 代码审查中（%s）\nRun ID: %s", preset, runID))
 
 	done := make(chan struct{})
+	defer close(done)
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -65,7 +66,6 @@ func cmdReviewLocal(root string, args []string) {
 
 	backend := p.defaultBackend
 	resp, err := callReviewBackend(diff, backend, p.systemPrompt)
-	close(done)
 
 	if err != nil {
 		writeError(runDir, err)
@@ -99,22 +99,52 @@ func cmdReviewLocal(root string, args []string) {
 		RunID: runID, Kind: "review-local", Status: "completed",
 		Stage: "done", StartedAt: now, UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
+	setExitCode(runDir, 0)
+	appendEvent(runDir, eventEntry{Ts: time.Now().UTC().Format(time.RFC3339), RunID: runID, Type: "completed"})
 
 	sendCallback(runDir, summary)
 	fmt.Println(summary)
 }
 
 func getLocalDiff(workDir string) string {
-	cmd := exec.Command("git", "diff")
+	cmd := exec.Command("git", "diff", "HEAD")
 	cmd.Dir = workDir
-	unstaged, _ := cmd.Output()
-
-	cmd2 := exec.Command("git", "diff", "--cached")
+	out, err := cmd.Output()
+	if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+		return strings.TrimSpace(string(out))
+	}
+	// Fallback: unstaged only (no commits yet or detached HEAD)
+	cmd2 := exec.Command("git", "diff")
 	cmd2.Dir = workDir
-	staged, _ := cmd2.Output()
+	out2, _ := cmd2.Output()
+	return strings.TrimSpace(string(out2))
+}
 
-	combined := strings.TrimSpace(string(unstaged)) + "\n" + strings.TrimSpace(string(staged))
-	return strings.TrimSpace(combined)
+func resolveReviewRepoRoot(root string) string {
+	if dir := os.Getenv("CC_REVIEW_REPO_ROOT"); dir != "" {
+		return filepath.Clean(dir)
+	}
+	if repo := gitTopLevel(root); repo != "" {
+		return repo
+	}
+	parent := filepath.Dir(root)
+	if repo := gitTopLevel(parent); repo != "" {
+		return repo
+	}
+	return root
+}
+
+func gitTopLevel(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(strings.TrimSpace(string(out)))
 }
 
 func formatReviewMobile(report *ReviewReport, preset, runID string) string {
