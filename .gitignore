@@ -21,3 +21,4 @@ test/
 
 # Runtime artifacts
 controller/latest-monitor-run.txt
+controller/active_project.json

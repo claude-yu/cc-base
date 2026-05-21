@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const deduplicationWindow = 5 * time.Second
+const deduplicationWindow = 30 * time.Second
 
 // findDuplicateRun checks the most recent 3 runs with the given suffix.
 // If any was created within deduplicationWindow and has identical question text,
@@ -59,11 +59,14 @@ func findDuplicateRun(runsRoot, suffix, questionText string) string {
 			continue
 		}
 
-		// Compare question text.
+		// Compare question text (ask uses incoming-question.md, exec-cc uses incoming-message.txt).
 		runDir := filepath.Join(runsRoot, name)
 		data, err := os.ReadFile(filepath.Join(runDir, "incoming-question.md"))
 		if err != nil {
-			continue
+			data, err = os.ReadFile(filepath.Join(runDir, "incoming-message.txt"))
+			if err != nil {
+				continue
+			}
 		}
 		if strings.TrimSpace(string(data)) == trimmedQuestion {
 			return name
@@ -99,9 +102,8 @@ func cmdAsk(root, suffix, runnerName string, args []string) {
 		os.Exit(1)
 	}
 
-	// Deduplication: reject identical questions within 5 seconds.
-	if dup := findDuplicateRun(filepath.Join(root, "runs"), suffix, text); dup != "" {
-		fmt.Printf("重复请求已忽略（5秒内相同问题）\nRun ID: %s\n", dup)
+	// Deduplication: silently ignore identical requests in a short window.
+	if findDuplicateRun(filepath.Join(root, "runs"), suffix, text) != "" {
 		return
 	}
 
@@ -137,9 +139,4 @@ func cmdAsk(root, suffix, runnerName string, args []string) {
 	writeFile(filepath.Join(runDir, "runner.pid"), fmt.Sprintf("%d", runner.Process.Pid))
 	updateStatusJSON(runDir, "running", "prepare", runner.Process.Pid)
 
-	label := "Codex"
-	if suffix == "cc-ask" {
-		label = "CC"
-	}
-	fmt.Printf("已开始询问 %s...\nRun ID: %s\n完成后自动回传结果\n", label, runID)
 }

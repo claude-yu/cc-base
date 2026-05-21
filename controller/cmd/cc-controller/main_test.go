@@ -131,6 +131,78 @@ func TestSanitizeProjectID_MixedName(t *testing.T) {
 	}
 }
 
+func TestResolveExecuteRequestWorkDirPrefersActiveProject(t *testing.T) {
+	projectDir := t.TempDir()
+	envDir := t.TempDir()
+	t.Setenv("CC_EXECUTE_WORK_DIR", envDir)
+
+	got, label, err := resolveExecuteRequestWorkDir(ActiveProject{WorkDir: projectDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(projectDir) {
+		t.Fatalf("workdir = %q, want active project %q", got, projectDir)
+	}
+	if label != "当前项目工作目录" {
+		t.Fatalf("label = %q, want active project label", label)
+	}
+}
+
+func TestResolveExecuteRequestWorkDirFallsBackToEnv(t *testing.T) {
+	envDir := t.TempDir()
+	t.Setenv("CC_EXECUTE_WORK_DIR", envDir)
+
+	got, label, err := resolveExecuteRequestWorkDir(ActiveProject{WorkDir: filepath.Join(t.TempDir(), "missing")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(envDir) {
+		t.Fatalf("workdir = %q, want env dir %q", got, envDir)
+	}
+	if label != "CC_EXECUTE_WORK_DIR" {
+		t.Fatalf("label = %q, want env label", label)
+	}
+}
+
+func writeTestRunStatus(t *testing.T, runsRoot, runID, sessionID, status, stage string) {
+	t.Helper()
+	runDir := filepath.Join(runsRoot, runID)
+	if err := os.MkdirAll(runDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeStatusJSON(runDir, statusJSON{
+		RunID:        runID,
+		Kind:         "cc-session",
+		Status:       status,
+		Stage:        stage,
+		SessionID:    sessionID,
+		SessionScope: "project_default",
+	})
+}
+
+func TestFindLatestMeaningfulRunForSessionRequiresExactSession(t *testing.T) {
+	runsRoot := t.TempDir()
+	writeTestRunStatus(t, runsRoot, "20260521-100000-cc-session-old", "", "completed", "done")
+	writeTestRunStatus(t, runsRoot, "20260521-100100-cc-session-other", "other-default", "completed", "done")
+	writeTestRunStatus(t, runsRoot, "20260521-100200-cc-session-current", "work_12-76504f6a-default", "completed", "done")
+
+	got := findLatestMeaningfulRunForSession(runsRoot, "", "work_12-76504f6a-default")
+	if got != "20260521-100200-cc-session-current" {
+		t.Fatalf("current session latest = %q, want current session run", got)
+	}
+}
+
+func TestFindLatestRunByKindForSessionIgnoresLegacyNoSessionRuns(t *testing.T) {
+	runsRoot := t.TempDir()
+	writeTestRunStatus(t, runsRoot, "20260521-100000-cc-session-current", "work_12-76504f6a-default", "completed", "done")
+	writeTestRunStatus(t, runsRoot, "20260521-100100-cc-session-legacy", "", "completed", "done")
+
+	got := findLatestRunByKindForSession(runsRoot, "cc-session", "work_12-76504f6a-default")
+	if got != "20260521-100000-cc-session-current" {
+		t.Fatalf("kind current session latest = %q, want current session run", got)
+	}
+}
+
 func TestCleanCodexOutputTaskkill(t *testing.T) {
 	cases := []struct {
 		name  string

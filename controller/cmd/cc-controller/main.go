@@ -62,9 +62,13 @@ func main() {
 	cmd := os.Args[1]
 	args := os.Args[2:]
 
-	// review doesn't need controller root — handle before resolveControllerRoot().
+	// These commands don't need controller root — handle before resolveControllerRoot().
 	if cmd == "review" {
 		cmdReview(args)
+		return
+	}
+	if cmd == "memory-health" {
+		cmdMemoryHealth(args)
 		return
 	}
 
@@ -106,6 +110,9 @@ func main() {
 			cmdExecuteQueue(root)
 		} else if isNumeric(args[0]) {
 			cmdExecuteQueueIndex(root, args[0])
+		} else if !runIDPattern.MatchString(args[0]) {
+			text := "执行 " + strings.Join(args, " ")
+			cmdExecCC(root, []string{"--auto", "--text", text, "--session", "default"})
 		} else {
 			cmdExecute(root, args[0])
 		}
@@ -135,6 +142,8 @@ func main() {
 		cmdMonitor(root)
 	case "research-monitor":
 		cmdResearchMonitor(root, args)
+	case "run-status":
+		cmdRunStatus(root, args)
 	case "review-local":
 		cmdReviewLocal(root, args)
 	case "memory-draft":
@@ -151,6 +160,8 @@ func main() {
 		} else {
 			cmdStatusShort(root)
 		}
+	case "quiet-ui":
+		cmdQuietUI(root, args)
 	case "switch":
 		mustHaveArgs(args, 1, "usage: cc-controller switch <project-name|path> [--chat-id <id>] [--platform <name>]")
 		target := args[0]
@@ -205,11 +216,15 @@ Commands:
   review-local [preset]   Review local git diff via DeepSeek/GLM
                           Presets: security (default), routing, general
   memory-draft [mode]     Generate memory/progress draft via GLM
-                          Modes: summary, record, status
+                          Modes: summary, record, status,
+                                 patch <name>, review-patch <runID>, apply <runID>
+  memory-health <dir>     Read-only health report for Claude Code memory store
+                          (or set CC_MEMORY_STORE env var)
   research-monitor        Scan research project for job status (Python/R/GROMACS)
            [--detector <name>]  Filter to specific detector
   status                  Show condensed status (default, mobile-friendly)
   status --full           Show full verbose status dashboard
+  quiet-ui [config...]    Patch cc-connect config to hide tool/thinking UI noise
   switch <name|path>      Switch to another project`)
 	os.Exit(1)
 }

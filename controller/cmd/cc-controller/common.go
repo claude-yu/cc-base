@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -98,25 +99,151 @@ func sendCallback(runDir, message string) {
 		}
 	}
 
-	cmd := exec.Command(ccConnect, "send", "--stdin", "-p", project)
-	cmd.Stdin = strings.NewReader(message)
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err, stderrText := runCCConnectSend(ccConnect, project, "", message); err != nil {
 		errMsg := fmt.Sprintf("cc-connect send failed (project=%s): %v", project, err)
-		if s := stderr.String(); s != "" {
-			errMsg += " stderr: " + strings.TrimSpace(s)
+		if stderrText != "" {
+			errMsg += " stderr: " + strings.TrimSpace(stderrText)
 		}
-		logCallbackError(runDir, errMsg)
+
+		sessionKey := resolveCallbackSessionKey(runDir, ccConnect, project)
+		if sessionKey != "" {
+			if retryErr, retryStderr := runCCConnectSend(ccConnect, project, sessionKey, message); retryErr == nil {
+				return
+			} else {
+				logCallbackError(runDir, errMsg)
+				retryMsg := fmt.Sprintf("cc-connect send retry failed (project=%s, session=%s): %v", project, redactSessionKey(sessionKey), retryErr)
+				if retryStderr != "" {
+					retryMsg += " stderr: " + strings.TrimSpace(retryStderr)
+				}
+				logCallbackError(runDir, retryMsg)
+			}
+		} else {
+			logCallbackError(runDir, errMsg)
+		}
 
 		runID := filepath.Base(runDir)
 		fallback := fmt.Sprintf("✅ 任务已完成，但结果发送失败（消息可能过长）。\n/结果 %s 查看完整内容", runID)
-		retry := exec.Command(ccConnect, "send", "--stdin", "-p", project)
-		retry.Stdin = strings.NewReader(fallback)
-		if retryErr := retry.Run(); retryErr != nil {
-			logCallbackError(runDir, "fallback send also failed: "+retryErr.Error())
+		if fallbackErr, fallbackStderr := runCCConnectSend(ccConnect, project, sessionKey, fallback); fallbackErr != nil {
+			msg := "fallback send also failed: " + fallbackErr.Error()
+			if fallbackStderr != "" {
+				msg += " stderr: " + strings.TrimSpace(fallbackStderr)
+			}
+			logCallbackError(runDir, msg)
 		}
 	}
+}
+
+func runCCConnectSend(ccConnect, project, sessionKey, message string) (error, string) {
+	args := []string{"send", "--stdin", "-p", project}
+	if strings.TrimSpace(sessionKey) != "" {
+		args = append(args, "-s", sessionKey)
+	}
+	cmd := exec.Command(ccConnect, args...)
+	cmd.Stdin = strings.NewReader(message)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return err, stderr.String()
+}
+
+func resolveCallbackSessionKey(runDir, ccConnect, project string) string {
+	if key := strings.TrimSpace(os.Getenv("CC_SESSION_KEY")); key != "" {
+		return key
+	}
+	if data, err := os.ReadFile(filepath.Join(runDir, "runner.cc-session-key")); err == nil {
+		if key := strings.TrimSpace(string(data)); key != "" {
+			return key
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(runDir, "runner.chat-id")); err == nil {
+		if key := sessionKeyFromBindingKey(strings.TrimSpace(string(data))); key != "" {
+			return key
+		}
+	}
+	return resolveCCConnectActiveSessionKey(ccConnect, project, "")
+}
+
+func resolveCCConnectActiveSessionKey(ccConnect, project, preferredPlatform string) string {
+	out, err := exec.Command(ccConnect, "sessions", "list").Output()
+	if err != nil {
+		return ""
+	}
+	sessionProject, platform := parseLatestSessionProjectPlatform(string(out), project)
+	if sessionProject == "" {
+		return ""
+	}
+	path := filepath.Join(os.Getenv("USERPROFILE"), ".cc-connect", "sessions", sessionProject+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if preferredPlatform != "" {
+		platform = preferredPlatform
+	}
+	return chooseActiveSessionKey(extractActiveSessionKeys(string(data)), platform)
+}
+
+func sessionKeyFromBindingKey(key string) string {
+	parts := strings.SplitN(key, bindingDelimiter, 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return ""
+	}
+	return parts[0] + ":" + parts[1]
+}
+
+func parseLatestSessionProjectPlatform(listOutput, project string) (string, string) {
+	for _, line := range strings.Split(listOutput, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || !isNumeric(fields[0]) {
+			continue
+		}
+		sessionProject := fields[1]
+		if sessionProject == project || strings.HasPrefix(sessionProject, project+"_") {
+			return sessionProject, fields[2]
+		}
+	}
+	return "", ""
+}
+
+func extractActiveSessionKeys(sessionJSON string) []string {
+	re := regexp.MustCompile(`(?s)"active_session"\s*:\s*\{(.*?)\}`)
+	m := re.FindStringSubmatch(sessionJSON)
+	if len(m) != 2 {
+		return nil
+	}
+	keyRe := regexp.MustCompile(`"([^"]+)"\s*:\s*"[^"]+"`)
+	matches := keyRe.FindAllStringSubmatch(m[1], -1)
+	keys := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) == 2 {
+			keys = append(keys, match[1])
+		}
+	}
+	return keys
+}
+
+func chooseActiveSessionKey(keys []string, platform string) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	prefix := platform + ":"
+	for _, key := range keys {
+		if strings.HasPrefix(key, prefix) {
+			return key
+		}
+	}
+	return keys[0]
+}
+
+func redactSessionKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	parts := strings.SplitN(key, ":", 2)
+	if len(parts) == 1 {
+		return parts[0]
+	}
+	return parts[0] + ":..."
 }
 
 func logCallbackError(runDir, errMsg string) {

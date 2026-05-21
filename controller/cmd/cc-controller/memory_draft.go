@@ -22,8 +22,14 @@ func cmdMemoryDraft(root string, args []string) {
 		cmdMemoryDraftGenerate(root, "record")
 	case "status", "状态":
 		cmdMemoryStatus(root)
+	case "patch", "补丁":
+		cmdMemoryPatch(root, args[1:])
+	case "review-patch", "审查补丁":
+		cmdMemoryPatchReview(root, args[1:])
+	case "apply", "应用":
+		cmdMemoryApply(root, args[1:])
 	default:
-		fmt.Fprintln(os.Stderr, "未知模式（可用: summary, record, status）")
+		fmt.Fprintln(os.Stderr, "未知模式（可用: summary, record, status, patch, review-patch, apply）")
 		os.Exit(1)
 	}
 }

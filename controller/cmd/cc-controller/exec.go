@@ -41,11 +41,18 @@ func cmdExecCC(root string, args []string) {
 		mode = classifyMode(text).String()
 	}
 
+	if findDuplicateRun(filepath.Join(root, "runs"), "cc-session", text) != "" {
+		return
+	}
+
 	runID := genRunID("cc-session")
 	runDir := filepath.Join(root, "runs", runID)
 	os.MkdirAll(runDir, 0755)
 	os.WriteFile(filepath.Join(runDir, "incoming-message.txt"), []byte(text), 0644)
 
+	if sessionKey := strings.TrimSpace(os.Getenv("CC_SESSION_KEY")); sessionKey != "" {
+		writeFile(filepath.Join(runDir, "runner.cc-session-key"), sessionKey)
+	}
 	if f.chatID != "" {
 		writeFile(filepath.Join(runDir, "runner.chat-id"), bindingKey(f.platform, f.chatID))
 	}
@@ -85,31 +92,26 @@ func cmdExecCC(root string, args []string) {
 	// MUST return before spawning any runner or calling Claude.
 	if mode == "execute_request" {
 		logRoute(root, text, "execute_request", "confirm_card", mode, runID, "classifyMode")
-		// execute_request: use CC_EXECUTE_WORK_DIR (safe sandbox).
-		// Never inherit CC_WORK_DIR (research project dir).
-		workDir := os.Getenv("CC_EXECUTE_WORK_DIR")
-		if workDir == "" || strings.Contains(workDir, "YOUR_PROJECT_ROOT") {
-			fmt.Fprintln(os.Stderr, "错误: CC_EXECUTE_WORK_DIR 未正确配置，请设置为真实目录，例如 E:\\ai\\selfwork_ytl\\test")
-			os.WriteFile(filepath.Join(runDir, "summary.md"), []byte("CC_EXECUTE_WORK_DIR 未正确配置，请设置为真实目录，例如 E:\\ai\\selfwork_ytl\\test"), 0644)
-			updateStatusJSON(runDir, "failed", "config_error", 0)
-			return
-		}
-		if _, err := os.Stat(workDir); err != nil {
-			fmt.Fprintf(os.Stderr, "错误: CC_EXECUTE_WORK_DIR 目录不存在: %s\n", workDir)
-			os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(fmt.Sprintf("CC_EXECUTE_WORK_DIR 目录不存在: %s", workDir)), 0644)
+		// execute_request should run in the active project workdir. Keep
+		// CC_EXECUTE_WORK_DIR only as a legacy fallback for unbound setups.
+		workDir, workDirLabel, err := resolveExecuteRequestWorkDir(project)
+		if err != nil {
+			msg := fmt.Sprintf("错误: 执行工作目录不可用: %v", err)
+			fmt.Fprintln(os.Stderr, msg)
+			os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(msg), 0644)
 			updateStatusJSON(runDir, "failed", "config_error", 0)
 			return
 		}
 		writeFile(filepath.Join(runDir, "runner.workdir"), workDir)
 		confirmMsg := fmt.Sprintf(`[执行确认] (RunId: %s)
 
-工作目录: %s（CC_EXECUTE_WORK_DIR）
+工作目录: %s（%s）
 权限:     --dangerously-skip-permissions（完整文件读写 + 命令执行）
-文件范围: 仅限沙盒目录
+文件范围: 当前项目目录
 回滚建议: 执行前建议先 git commit 保存当前状态；执行后可用 git diff 查看改动
 
 确认执行:
-  /执行 %s`, runID, workDir, runID)
+  /执行 %s`, runID, workDir, workDirLabel, runID)
 		os.WriteFile(filepath.Join(runDir, "summary.md"), []byte(confirmMsg), 0644)
 		updateStatusJSON(runDir, "confirming", "awaiting_confirmation", 0)
 		appendEvent(runDir, eventEntry{
@@ -119,7 +121,6 @@ func cmdExecCC(root string, args []string) {
 		})
 		sendCallback(runDir, confirmMsg)
 		queueAdd(root, runID, workDir, text)
-		fmt.Printf("已生成执行确认 (Run ID: %s), 工作目录: %s\n", runID, workDir)
 		return
 	}
 
@@ -133,7 +134,6 @@ func cmdExecCC(root string, args []string) {
 		setExitCode(runDir, 0)
 		appendEvent(runDir, eventEntry{Ts: time.Now().UTC().Format(time.RFC3339), RunID: runID, Type: "completed", ExitCode: 0})
 		sendCallback(runDir, "[CC] "+result)
-		fmt.Printf("已返回结果位置查询 (Run ID: %s)\n", runID)
 		return
 	}
 
@@ -157,8 +157,7 @@ func cmdExecCC(root string, args []string) {
 		updateStatusJSON(runDir, "completed", "done", 0)
 		setExitCode(runDir, 0)
 		appendEvent(runDir, eventEntry{Ts: time.Now().UTC().Format(time.RFC3339), RunID: runID, Type: "completed", ExitCode: 0})
-		sendCallback(runDir, "[CC] " + result)
-		fmt.Printf("已返回本地状态查询 (Run ID: %s)\n", runID)
+		sendCallback(runDir, "[CC] "+result)
 		return
 	}
 
@@ -189,8 +188,40 @@ func cmdExecCC(root string, args []string) {
 
 	preview := sanitizeQuestionPreview(text)
 	sendCallback(runDir, fmt.Sprintf("收到，处理中...\n问题: %s", preview))
+}
 
-	fmt.Printf("已开始 CC 处理 (Run ID: %s, Session: %s, Mode: %s)\n", runID, sessionID, mode)
+func resolveExecuteRequestWorkDir(project ActiveProject) (string, string, error) {
+	candidates := []struct {
+		dir   string
+		label string
+	}{
+		{strings.TrimSpace(project.WorkDir), "当前项目工作目录"},
+		{strings.TrimSpace(os.Getenv("CC_EXECUTE_WORK_DIR")), "CC_EXECUTE_WORK_DIR"},
+	}
+	var reasons []string
+	for _, c := range candidates {
+		if c.dir == "" || c.dir == "." || strings.Contains(c.dir, "YOUR_PROJECT_ROOT") {
+			if c.dir != "" {
+				reasons = append(reasons, fmt.Sprintf("%s=%q 不是有效目录", c.label, c.dir))
+			}
+			continue
+		}
+		clean := filepath.Clean(c.dir)
+		fi, err := os.Stat(clean)
+		if err != nil {
+			reasons = append(reasons, fmt.Sprintf("%s 不存在: %s", c.label, clean))
+			continue
+		}
+		if !fi.IsDir() {
+			reasons = append(reasons, fmt.Sprintf("%s 不是目录: %s", c.label, clean))
+			continue
+		}
+		return clean, c.label, nil
+	}
+	if len(reasons) == 0 {
+		return "", "", fmt.Errorf("当前项目工作目录为空，且 CC_EXECUTE_WORK_DIR 未配置")
+	}
+	return "", "", fmt.Errorf("%s", strings.Join(reasons, "; "))
 }
 
 func cmdExecute(root, runID string) {
@@ -611,12 +642,12 @@ func formatResearchStatus(root string) string {
 }
 
 var detectorMatchAliases = map[string][]string{
-	"alphafold":    {"alphafold", "colabfold"},
-	"gromacs":      {"gromacs"},
-	"schrodinger":  {"schrodinger"},
-	"amber_openmm": {"amber_openmm"},
+	"alphafold":     {"alphafold", "colabfold"},
+	"gromacs":       {"gromacs"},
+	"schrodinger":   {"schrodinger"},
+	"amber_openmm":  {"amber_openmm"},
 	"autodock_vina": {"autodock_vina"},
-	"gaussian":     {"gaussian"},
+	"gaussian":      {"gaussian"},
 }
 
 func detectorMatches(resultDetector, filterDetector string) bool {
@@ -743,7 +774,7 @@ func findLatestMeaningfulRunForSession(runsRoot, excludeID, sessionID string) st
 		if s.Status == "confirming" {
 			continue
 		}
-		if sessionID != "" && s.SessionID != "" && s.SessionID != sessionID {
+		if sessionID != "" && s.SessionID != sessionID {
 			continue
 		}
 		dirs = append(dirs, e.Name())

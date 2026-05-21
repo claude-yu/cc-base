@@ -87,30 +87,41 @@ func runCC(root, runID, sessionID, mode string) {
 
 	done := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		initialDelay := 90 * time.Second
+		if mode == "execute" {
+			initialDelay = 30 * time.Second
+		}
+		timer := time.NewTimer(initialDelay)
+		defer timer.Stop()
+		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		start := time.Now()
 		lastOutLen := 0
+		sendHeartbeat := func() {
+			elapsed := int(time.Since(start).Seconds())
+			outLen := stdout.Len() + stderr.Len()
+			extra := "工作目录: " + workDir
+			if outLen > lastOutLen {
+				extra += fmt.Sprintf("\n输出: %d 字节 (活跃)", outLen)
+			} else if outLen > 0 {
+				extra += fmt.Sprintf("\n输出: %d 字节 (等待中)", outLen)
+			}
+			lastOutLen = outLen
+			appendEvent(runDir, eventEntry{
+				Ts:         time.Now().UTC().Format(time.RFC3339),
+				RunID:      runID,
+				Type:       "heartbeat",
+				Stage:      mode + "_running",
+				ElapsedSec: elapsed,
+			})
+			sendCallback(runDir, heartbeatMsg("CC", runID, elapsed, extra))
+		}
 		for {
 			select {
+			case <-timer.C:
+				sendHeartbeat()
 			case <-ticker.C:
-				elapsed := int(time.Since(start).Seconds())
-				outLen := stdout.Len() + stderr.Len()
-				extra := "工作目录: " + workDir
-				if outLen > lastOutLen {
-					extra += fmt.Sprintf("\n输出: %d 字节 (活跃)", outLen)
-				} else if outLen > 0 {
-					extra += fmt.Sprintf("\n输出: %d 字节 (等待中)", outLen)
-				}
-				lastOutLen = outLen
-				appendEvent(runDir, eventEntry{
-					Ts:         time.Now().UTC().Format(time.RFC3339),
-					RunID:      runID,
-					Type:       "heartbeat",
-					Stage:      mode + "_running",
-					ElapsedSec: elapsed,
-				})
-				sendCallback(runDir, heartbeatMsg("CC", runID, elapsed, extra))
+				sendHeartbeat()
 			case <-done:
 				return
 			}
@@ -192,6 +203,11 @@ Core rules:
 	case "readonly":
 		return `You are Claude Code acting as a read-only technical advisor. You may read files and search code to answer questions. Do NOT modify any files. Do NOT run shell commands. Do NOT spawn subagents.
 
+Execution workflow:
+- If the user asks to approve work, switch to executable mode, or let you write/run code, do NOT tell them to restart Claude Code.
+- Tell them to send a new concrete execution request starting with "执行", for example: "执行 Phase 1.1：创建并运行 01_explore_data.R".
+- The controller will return a confirmation card. The user must then send "/执行 <RunId>" to actually run it.
+
 Core rules:
 - 拒绝废话：直接给结论，不解释环境或定义
 - 简洁优先：用最少的输出解决问题，不要堆砌
@@ -199,6 +215,11 @@ Core rules:
 - 大声失败：遇到不确定的就说不知道，不编造`
 	default: // advice
 		return `You are Claude Code acting as an advice-only assistant. Do not modify files. Do not run shell commands. Do not spawn subagents. Read files if needed, but return concise, structured output. Answer the user's question directly.
+
+Execution workflow:
+- If the user asks to approve work, switch to executable mode, or let you write/run code, do NOT tell them to restart Claude Code.
+- Tell them to send a new concrete execution request starting with "执行", for example: "执行 Phase 1.1：创建并运行 01_explore_data.R".
+- The controller will return a confirmation card. The user must then send "/执行 <RunId>" to actually run it.
 
 Core rules:
 - 拒绝废话：直接给结论，不解释环境或定义

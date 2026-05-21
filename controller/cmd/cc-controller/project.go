@@ -148,6 +148,9 @@ func cmdSwitchProject(root, target, platform, chatID string) {
 		fmt.Fprintf(os.Stderr, "写入项目配置失败: %s\n", err)
 		os.Exit(1)
 	}
+	if err := syncCCConnectProjectState("cc", p.WorkDir); err != nil {
+		fmt.Fprintf(os.Stderr, "警告: 同步 cc-connect 工作目录失败: %s\n", err)
+	}
 
 	if chatID != "" {
 		updateBinding(root, platform, chatID, ChatBinding{
@@ -162,4 +165,24 @@ func cmdSwitchProject(root, target, platform, chatID string) {
 	fmt.Printf("Name: %s\n", p.Name)
 	fmt.Printf("WorkDir: %s\n", p.WorkDir)
 	fmt.Printf("Session: %s\n", session)
+}
+
+func syncCCConnectProjectState(projectName, workDir string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	stateDir := filepath.Join(home, ".cc-connect", "projects")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return err
+	}
+	state := map[string]string{
+		"work_dir_override": workDir,
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(stateDir, projectName+".state.json"), data, 0644)
 }

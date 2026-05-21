@@ -1,8 +1,8 @@
 <p align="center">
   <h1 align="center">cc-base</h1>
-  <p align="center"><strong>移动端远程操控 Claude Code + Codex 的多 Agent 控制器</strong></p>
+  <p align="center"><strong>移动端远程操控 Claude Code + Codex 的多 Agent 控制器 + 科研监控 + 代码审查</strong></p>
   <p align="center">
-    🤖 微信 / QQ 远程操控 &nbsp;|&nbsp; 🔄 Session 连续对话 &nbsp;|&nbsp; 📋 计划审查 &nbsp;|&nbsp; 🧠 自动学习
+    🤖 微信 / QQ 远程操控 &nbsp;|&nbsp; 🔬 12 科研 Detector &nbsp;|&nbsp; 🔍 DeepSeek/GLM 审查 &nbsp;|&nbsp; 🧠 记忆维护
   </p>
 </p>
 
@@ -26,6 +26,9 @@
 | **任务取消** | `/取消任务 [RunId]` | 取消运行中的任务 |
 | **计划质询** | `/质询计划` | Grill-Me 模式逐条质询审查结果 |
 | **自动回传** | `/自动回传 开/关` | 异步任务完成后自动推回聊天窗口 |
+| **代码审查** | `/审查 [preset]` | 独立 LLM 审查（security→DeepSeek, routing/general→GLM） |
+| **记忆健康** | `/记忆状态` | 记忆文件健康扫描（staleness/noise/索引一致性） |
+| **记忆整理** | `/记忆整理 <name>` | GLM 生成记忆 patch → `/记忆审查` → `/记忆应用` |
 
 ---
 
@@ -64,9 +67,9 @@ cc-connect（Go 多平台聊天网关）
     │   └── 命令 → cc-controller.exe（Go 控制器）
     │
     └── [[commands]] 路由
-        ├── Go 二进制直调：/cc /问codex /项目 /切项目 /执行 /科研监控
-        ├── PowerShell pipeline：/计划审查 /查看审查 /质询计划
-        └── PowerShell 单步：/修复controller /md状态检查 /学习状态
+        ├── Go 直调：/cc /问codex /项目 /切项目 /执行 /科研监控 /审查 /记忆*
+        ├── PS pipeline：/计划审查 /查看审查 /质询计划
+        └── PS 单步：/修复controller /md状态检查 /学习状态
 ```
 
 ### Architecture: Platform / Role / Backend
@@ -95,29 +98,18 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 
 ### Go 控制器结构
 
-`cc-controller.exe`（18 文件，`controller/cmd/cc-controller/`）：
+`cc-controller.exe`（55 文件 = 33 源码 + 22 测试, 455+ tests）：
 
-| 文件 | 职责 |
-|------|------|
-| `main.go` | 入口、路由 |
-| `common.go` | 共享工具函数 |
-| `ask.go` | 无状态 ask 入口 |
-| `exec.go` | Session 对话管理 + 执行确认 |
-| `cc.go` | Claude Code 执行器 + 心跳 |
-| `codex.go` | Codex 执行器 |
-| `cancel.go` | 任务取消 |
-| `project.go` | 多项目切换 |
-| `status.go` | 状态持久化 + 查询 |
-| `classify.go` | 模式分类器 |
-| `backend.go` | Backend 选择器（native/API）+ API client |
-| `queue.go` | Waiting queue（入队/分发/清理） |
-| `monitor.go` | Stuck/zombie task 监控 + 自动清理 |
-| `detector.go` | 科研任务 detector（GROMACS/Python/R/GenericCLI） |
-| `detector_docker.go` | Docker 容器 detector |
-| `research_monitor.go` | /科研监控 命令处理 + 报告 |
-| `main_test.go` | 单元测试 |
-| `classify_test.go` | 分类器测试 |
-| `detector_test.go` | detector 测试（37 tests） |
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| 核心 | `main.go` `common.go` `ask.go` `exec.go` `cc.go` `codex.go` | 入口、路由、session 对话、runner |
+| 任务管理 | `cancel.go` `project.go` `status.go` `queue.go` `monitor.go` | 取消、多项目、状态、队列、zombie 检测 |
+| 分类/上下文 | `classify.go` `context.go` `binding.go` | 模式分类、session 上下文、参数绑定 |
+| 后端 | `backend.go` | Backend 选择（native/DeepSeek/GLM/OpenAI）+ API client |
+| 审查 | `review.go` `review_local.go` `review_types.go` | 独立代码审查（3 presets, 双后端） |
+| 记忆维护 | `memory_health.go` `memory_draft.go` `memory_patch.go` | 健康扫描 + GLM→DeepSeek→Writer patch pipeline |
+| 科研监控 | `detector.go` + 8 专用 detector + `research_monitor.go` | 12 detector 扫描科研任务状态 |
+| 工具 | `run_status.go` `quiet_ui.go` | run 状态查询、UI 噪声过滤 |
 
 ---
 
@@ -160,7 +152,12 @@ Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
 | `/进化习惯` | 进化 | 生成习惯进化候选 | PS |
 | `/自动回传 开/关` | 回传 | 开关自动回传 | PS |
 | `/监控` | monitor、检查任务 | 检测 stuck/zombie 任务 | Go |
-| `/科研监控` | 任务监控、运行监控、research | 扫描科研任务状态（GROMACS/Python/R/Docker） | Go |
+| `/科研监控` | 任务监控、运行监控、research | 扫描 12 类科研任务状态 | Go |
+| `/审查 [preset]` | 审查代码、review | 独立 LLM 代码审查（security/routing/general） | Go |
+| `/记忆状态` | 记忆、memory | 记忆健康扫描 | Go |
+| `/记忆整理 <name>` | mem整理 | GLM 生成记忆 patch | Go |
+| `/记忆审查 <runID>` | mem审查 | DeepSeek 审查 patch | Go |
+| `/记忆应用 <runID>` | mem应用 | 应用已批准 patch（5 安全门） | Go |
 | `/自检` | 检查安装 | 12 项安装自检 | PS |
 
 ---

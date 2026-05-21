@@ -68,6 +68,24 @@ func TestGatherMemoryContext(t *testing.T) {
 	}
 }
 
+func TestResolveMemoryRootDefaultsToControllerParent(t *testing.T) {
+	tmp := t.TempDir()
+	controllerRoot := filepath.Join(tmp, "controller")
+	got := resolveMemoryRoot(controllerRoot)
+	if got != tmp {
+		t.Fatalf("resolveMemoryRoot = %q, want parent %q", got, tmp)
+	}
+}
+
+func TestResolveMemoryRootEnvOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("CC_MEMORY_ROOT", tmp)
+	got := resolveMemoryRoot(filepath.Join(t.TempDir(), "controller"))
+	if got != tmp {
+		t.Fatalf("resolveMemoryRoot env = %q, want %q", got, tmp)
+	}
+}
+
 func TestCountRecentRuns(t *testing.T) {
 	tmp := t.TempDir()
 	os.MkdirAll(filepath.Join(tmp, "run-1"), 0755)

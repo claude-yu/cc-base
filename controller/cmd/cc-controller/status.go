@@ -105,6 +105,9 @@ func showRun(root, runID, kind string) {
 	if runID == "" {
 		runID = findLatestMeaningfulRunForSession(runsRoot, "", sessionID)
 		if runID == "" {
+			runID = findLatestRunByKindForSession(runsRoot, "cc-session", sessionID)
+		}
+		if runID == "" {
 			fmt.Fprintln(os.Stderr, "当前项目暂无结果")
 			os.Exit(1)
 		}
@@ -147,7 +150,7 @@ func findLatestRunByKindForSession(runsRoot, kind, sessionID string) string {
 		if sessionID != "" {
 			runDir := filepath.Join(runsRoot, e.Name())
 			s := readStatusJSON(runDir)
-			if s.SessionID != "" && s.SessionID != sessionID {
+			if s.SessionID != sessionID {
 				continue
 			}
 		}

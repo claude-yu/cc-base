@@ -232,6 +232,37 @@ description = "切换到指定项目（/切项目 work-15）"
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe switch {{args}}"
 work_dir = "YOUR_PROJECT_ROOT\\controller"
 
+# --- 记忆管理（memory maintenance via progress-recorder） ---
+[[commands]]
+name = "记忆状态"
+description = "记忆健康扫描（文件行数、陈旧度、建议 archive）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe memory-health YOUR_MEMORY_DIR"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "记忆健康"
+description = "记忆健康扫描（同 /记忆状态）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe memory-health YOUR_MEMORY_DIR"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "记忆整理"
+description = "GLM 生成记忆整理 patch 草稿（/记忆整理 <名称>）；完成后用 /记忆审查 <runID>"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe memory-draft patch {{args}} --dir YOUR_MEMORY_DIR"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "记忆审查"
+description = "DeepSeek 审查记忆 patch（/记忆审查 <runID>）；通过后用 /记忆应用 <runID>"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe memory-draft review-patch {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
+[[commands]]
+name = "记忆应用"
+description = "应用已审查通过的记忆 patch（/记忆应用 <runID>）"
+exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe memory-draft apply {{args}}"
+work_dir = "YOUR_PROJECT_ROOT\\controller"
+
 [[commands]]
 name = "状态"
 description = "查看系统状态（项目、活动任务、最近记录）"
@@ -326,6 +357,29 @@ command = "/计划审查"
 [[aliases]]
 name = "审查计划"
 command = "/计划审查"
+
+# --- 记忆管理 ---
+[[aliases]]
+name = "记忆"
+command = "/记忆状态"
+[[aliases]]
+name = "memory"
+command = "/记忆状态"
+[[aliases]]
+name = "mem状态"
+command = "/记忆状态"
+[[aliases]]
+name = "记忆健康"
+command = "/记忆状态"
+[[aliases]]
+name = "mem整理"
+command = "/记忆整理"
+[[aliases]]
+name = "mem审查"
+command = "/记忆审查"
+[[aliases]]
+name = "mem应用"
+command = "/记忆应用"
 
 # --- MD 状态 ---
 [[aliases]]

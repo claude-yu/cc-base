@@ -1,15 +1,15 @@
 ---
 name: cc-base
-description: Claude Code 基础工作流 + 移动端远程操控 pipeline + Chat-Instinct 学习。涵盖 cc-connect 命令编码、后台进程管理、config 同步、PowerShell 安全、controller 修复、聊天入口学习、计划质询、Codex 异步问答、Session-aware CC 对话、多项目切换和自动回传。所有通过微信/QQ 等移动 app 远程操控 CC+Codex 的场景必须先加载此 skill。完全自包含：内置 22 个 PowerShell 脚本模板 + Go 二进制控制器 + config 模板。
-version: 2.5.0
+description: Claude Code 基础工作流 + 移动端远程操控 pipeline + 科研监控 + 独立代码审查 + 记忆维护。Go 控制器（55 文件, 455+ tests）含 12 科研 detector、DeepSeek/GLM 多模型审查、GLM→DeepSeek→Writer 记忆 patch pipeline。通过微信/QQ 远程操控 CC+Codex 的场景必须先加载此 skill。
+version: 3.0.0
 ---
 
-# cc-base — 远程操控 Skill v2.5.0
+# cc-base — 远程操控 Skill v3.0.0
 
 所有任务的前置流程，优先级高于具体领域 skill。
 适用于通过微信/QQ 等移动 app 远程操控 CC+Codex 的场景。
 
-**v2.5.0 新增**：QQ NapCat 接入（`docs/qq-setup.md`）、`CC_MODEL` 环境变量（controller 传 `--model` 到 Claude CLI）、多 provider 支持（OpenAI/DeepSeek/GLM）、`/查看` `/勘察` `/看看` 提升为独立 `[[commands]]`、执行确认快捷词（`ok/好/可以/确认`）单任务自动匹配。
+**v3.0.0 新增**：独立代码审查（`review --preset security|routing|general`，DeepSeek/GLM 双后端）、12 科研 detector（GROMACS/Schrodinger/HADDOCK3/Rosetta/AutoDock/AlphaFold/Amber/Gaussian 等）、记忆维护系统（`memory-health` 健康扫描 + `memory-draft patch/review-patch/apply` GLM→DeepSeek→Writer pipeline，5 道安全门）、run-status JSON 查询、quiet-ui 噪声过滤。
 
 ## Skill 内置结构
 
@@ -46,28 +46,43 @@ skills/cc-base/
 │       ├── grill-plan.ps1            # /质询计划（Grill-Me）
 │       ├── instinct-status.ps1       # /学习状态
 │       └── evolve-instincts.ps1      # /进化习惯
-├── controller/                       # ★ Go 控制器（session-aware cc/codex 权威实现）
+├── controller/                       # ★ Go 控制器
 │   ├── go.mod
-│   └── cmd/cc-controller/            # 18 文件（14 源码 + 4 测试）
-│       ├── main.go                   # 入口、类型、main() switch、usage()
+│   └── cmd/cc-controller/            # 55 文件（33 源码 + 22 测试, 455+ tests）
+│       ├── main.go                   # 入口、路由、usage()
 │       ├── common.go                 # 共享辅助函数
 │       ├── ask.go                    # genRunID、stateless ask
-│       ├── exec.go                   # session-aware exec、mode classifier、session 管理
-│       ├── cc.go                     # Claude Code runner + heartbeat goroutine
-│       ├── codex.go                  # Codex runner + 输出清理 + heartbeat
+│       ├── exec.go                   # session-aware exec + mode classifier
+│       ├── cc.go                     # Claude Code runner + heartbeat
+│       ├── codex.go                  # Codex runner + 输出清理
 │       ├── cancel.go                 # 任务取消（PID 扫描）
-│       ├── project.go                # 多项目切换（active_project.json、session ID）
-│       ├── status.go                 # 状态/事件/transcript + show
+│       ├── project.go                # 多项目切换
+│       ├── status.go                 # 状态持久化 + show + 仪表盘
 │       ├── classify.go               # 模式分类器（advice/readonly/execute_request）
-│       ├── backend.go                # Backend 选择器（native/openai/deepseek/glm）+ API client
-│       ├── queue.go                  # Waiting queue（CRUD + prune + 智能分发）
-│       ├── monitor.go                # Stuck/zombie task 监控 + 自动清理
-│       ├── detector.go               # 科研任务 detector 框架（GROMACS/Python/R/GenericCLI）
-│       ├── detector_docker.go        # Docker 容器 detector（prosettac/haddock3/colabfold/rosetta 等）
-│       ├── research_monitor.go       # /科研监控 命令处理 + 报告生成 + 手机端摘要
-│       ├── main_test.go              # 单元测试（classifier、readInput、findLatestRun）
-│       ├── classify_test.go          # 分类器测试
-│       └── detector_test.go          # detector 单元测试（37 tests, 含误判防护）
+│       ├── backend.go                # Backend 选择器 + API client（DeepSeek/GLM/OpenAI）
+│       ├── queue.go                  # Waiting queue
+│       ├── monitor.go                # Stuck/zombie task 监控
+│       ├── context.go                # Session 上下文管理
+│       ├── binding.go                # 参数绑定
+│       ├── run_status.go             # run-status JSON 查询
+│       ├── quiet_ui.go               # cc-connect UI 噪声过滤
+│       ├── review.go                 # ★ 独立代码审查（DeepSeek/GLM 双后端）
+│       ├── review_local.go           # review-local 本地 git diff 审查
+│       ├── review_types.go           # 审查类型定义
+│       ├── memory_draft.go           # 记忆草稿（summary/record/status/patch dispatch）
+│       ├── memory_health.go          # ★ 记忆健康扫描（只读）
+│       ├── memory_patch.go           # ★ GLM patch + DeepSeek review + Writer apply
+│       ├── detector.go               # 科研 detector 框架（GROMACS/Python/R/GenericCLI）
+│       ├── detector_docker.go        # Docker 容器 detector
+│       ├── detector_schrodinger.go   # Schrodinger detector
+│       ├── detector_haddock3.go      # HADDOCK3 detector
+│       ├── detector_rosetta.go       # Rosetta detector
+│       ├── detector_autodock_vina.go # AutoDock/Vina detector
+│       ├── detector_alphafold.go     # AlphaFold/ColabFold detector
+│       ├── detector_amber_openmm.go  # Amber/OpenMM detector
+│       ├── detector_gaussian.go      # Gaussian detector
+│       ├── research_monitor.go       # /科研监控 命令 + 报告 + JSON output
+│       └── *_test.go                 # 22 测试文件（455+ tests）
 ├── rules/                            # 操作规则
 │   ├── encoding.md                   # GBK/UTF-8 编码规则
 │   ├── proxy.md                      # 代理隔离规则
@@ -107,6 +122,9 @@ skills/cc-base/
 | Chat-Instinct 学习系统 | `docs/instinct-learning.md` |
 | Research-Memory bridge | `docs/research-memory-plan.md`（冻结规格，未实现） |
 | 科研任务监控框架 | `docs/research-job-monitor-plan.md` |
+| 独立代码审查 | `controller/cmd/cc-controller/review.go` |
+| 记忆健康扫描 | `controller/cmd/cc-controller/memory_health.go` |
+| 记忆 patch pipeline | `controller/cmd/cc-controller/memory_patch.go` |
 | WeChat 接入 | `docs/wechat-setup.md` |
 | QQ NapCat 接入 | `docs/qq-setup.md` |
 | 所有脚本源码 | `scripts/bin/*.ps1` |
@@ -132,7 +150,12 @@ skills/cc-base/
 | `/执行 <RunId>` | 执行已确认的任务（完整工具权限） |
 | `/取消任务 [RunId]` | 取消正在运行的任务 |
 | `/监控` | 检查 stuck/zombie 任务，自动清理并通知 |
-| `/科研监控` | 扫描科研项目目录，检测 GROMACS/Python/R/Docker 任务状态（只读） |
+| `/科研监控` | 扫描科研项目目录，检测 12 类科研任务状态（只读） |
+| `/审查 [preset]` | 独立代码审查（security→DeepSeek, routing/general→GLM） |
+| `/记忆状态` | 记忆健康扫描（staleness/noise/索引一致性） |
+| `/记忆整理 <name>` | GLM 生成记忆 patch 草稿 |
+| `/记忆审查 <runID>` | DeepSeek 审查 patch（APPROVE/REJECT） |
+| `/记忆应用 <runID>` | 应用已批准 patch（5 道安全门） |
 | `/自检` | 12 项安装自检（Claude/Codex/cc-connect/Go/Docker/config 等） |
 | `/学习状态` | 查看 chat-instinct 观察记录和习惯统计 |
 | `/进化习惯` | 分析观察记录，生成习惯进化候选 |
@@ -288,7 +311,8 @@ continuous-learning-v2 可作为增强：
 |---------|--------|------|
 | `发给cc` / `问cc` / `opus` | `/cc`（session-aware） | 保持上下文连续对话 |
 | `发给codex` / `问codex` / `gpt` | `/问codex` | 异步 Codex 问答 |
-| `ok` / `好` / `可以` / `确认` | `/执行` | 仅当恰好有 1 个 waiting 任务时自动执行；多个 waiting 任务时需 `/执行 RunId` 指定 |
+| `记忆` / `memory` / `mem状态` | `/记忆状态` | 记忆健康扫描 |
+| `mem整理` / `mem审查` / `mem应用` | `/记忆整理` `/记忆审查` `/记忆应用` | 记忆 patch pipeline |
 
 ## CC_MODEL 与多 Provider 支持
 
