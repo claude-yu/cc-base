@@ -57,28 +57,37 @@ func sendCallback(runDir, message string) {
 	callbackPath := filepath.Join(runDir, "callback-msg.md")
 	os.WriteFile(callbackPath, []byte(message), 0644)
 
-	ccConnect, err := exec.LookPath("cc-connect")
-	if err != nil {
-		candidates := []string{
-			filepath.Join(os.Getenv("LOCALAPPDATA"), "cc-connect", "cc-connect.exe"),
-			"cc-connect.exe",
-		}
-		if exe, exeErr := os.Executable(); exeErr == nil {
-			dir := filepath.Dir(exe)
-			for _, name := range []string{"cc-connect-fork-v4b.exe", "cc-connect-fork-v4.exe", "cc-connect-fork-v3.exe", "cc-connect-fork.exe"} {
-				candidates = append(candidates, filepath.Join(dir, "..", "cc-connect", name))
-			}
-		}
-		for _, c := range candidates {
+	// Prefer fork binaries over PATH (PATH has npm .cmd wrapper that isn't our fork).
+	var ccConnect string
+	if exe, exeErr := os.Executable(); exeErr == nil {
+		dir := filepath.Dir(exe)
+		for _, name := range []string{"cc-connect-fork-v4b.exe", "cc-connect-fork-v4.exe", "cc-connect-fork-v3.exe", "cc-connect-fork.exe"} {
+			c := filepath.Join(dir, "..", "cc-connect", name)
 			if _, err := os.Stat(c); err == nil {
 				ccConnect = c
 				break
 			}
 		}
-		if ccConnect == "" {
-			logCallbackError(runDir, "cc-connect not found on PATH or in known locations")
-			return
+	}
+	if ccConnect == "" {
+		for _, c := range []string{
+			filepath.Join(os.Getenv("LOCALAPPDATA"), "cc-connect", "cc-connect.exe"),
+			"cc-connect.exe",
+		} {
+			if _, err := os.Stat(c); err == nil {
+				ccConnect = c
+				break
+			}
 		}
+	}
+	if ccConnect == "" {
+		if p, err := exec.LookPath("cc-connect"); err == nil {
+			ccConnect = p
+		}
+	}
+	if ccConnect == "" {
+		logCallbackError(runDir, "cc-connect not found in fork dir, LOCALAPPDATA, or PATH")
+		return
 	}
 
 	// Use reply-project if specified, otherwise default to "cc".

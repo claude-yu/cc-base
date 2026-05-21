@@ -265,11 +265,15 @@ func cmdCancelQueueIndex(root string, idxStr string) {
 func describeQueue(root string) string {
 	entries := readQueue(root)
 	if len(entries) == 0 {
-		return "等待执行: 无"
+		return "待确认任务: 无"
 	}
-	s := fmt.Sprintf("等待执行: %d 个\n", len(entries))
+	s := fmt.Sprintf("待确认任务: %d 个\n", len(entries))
 	for _, e := range entries {
-		s += fmt.Sprintf("  #%d  %s\n", e.Index, e.Title)
+		age := ""
+		if t, err := time.Parse(time.RFC3339, e.CreatedAt); err == nil {
+			age = " (" + humanDuration(t) + ")"
+		}
+		s += fmt.Sprintf("  #%d  %s%s\n", e.Index, e.Title, age)
 	}
 	return s
 }

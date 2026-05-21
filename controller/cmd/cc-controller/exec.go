@@ -546,7 +546,8 @@ func isResultLocationQuery(text string) bool {
 }
 
 func formatResultLocation(root, currentRunID string) string {
-	latest := findLatestRunExcluding(filepath.Join(root, "runs"), currentRunID)
+	sessionID := currentSessionID(root)
+	latest := findLatestMeaningfulRunForSession(filepath.Join(root, "runs"), currentRunID, sessionID)
 	if latest == "" {
 		return "暂无运行记录，无法定位结果文件"
 	}
@@ -675,7 +676,8 @@ func humanStatus(status string) string {
 
 func formatLatestStatus(root, currentRunID string) string {
 	runsRoot := filepath.Join(root, "runs")
-	latest := findLatestMeaningfulRun(runsRoot, currentRunID)
+	sessionID := currentSessionID(root)
+	latest := findLatestMeaningfulRunForSession(runsRoot, currentRunID, sessionID)
 	if latest == "" {
 		if brief := briefResearchSummary(root); brief != "" {
 			return brief + "\n详情: 科研监控"
@@ -720,6 +722,10 @@ func formatLatestStatus(root, currentRunID string) string {
 }
 
 func findLatestMeaningfulRun(runsRoot, excludeID string) string {
+	return findLatestMeaningfulRunForSession(runsRoot, excludeID, "")
+}
+
+func findLatestMeaningfulRunForSession(runsRoot, excludeID, sessionID string) string {
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
 		return ""
@@ -737,6 +743,9 @@ func findLatestMeaningfulRun(runsRoot, excludeID string) string {
 		if s.Status == "confirming" {
 			continue
 		}
+		if sessionID != "" && s.SessionID != "" && s.SessionID != sessionID {
+			continue
+		}
 		dirs = append(dirs, e.Name())
 	}
 	if len(dirs) == 0 {
@@ -744,6 +753,14 @@ func findLatestMeaningfulRun(runsRoot, excludeID string) string {
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
 	return dirs[0]
+}
+
+func currentSessionID(root string) string {
+	p := readActiveProject(root)
+	if p.ProjectID == "" {
+		return ""
+	}
+	return p.ProjectID + "-default"
 }
 
 var pastedCommandPrefixes = []string{

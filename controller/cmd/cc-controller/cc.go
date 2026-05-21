@@ -90,10 +90,19 @@ func runCC(root, runID, sessionID, mode string) {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		start := time.Now()
+		lastOutLen := 0
 		for {
 			select {
 			case <-ticker.C:
 				elapsed := int(time.Since(start).Seconds())
+				outLen := stdout.Len() + stderr.Len()
+				extra := "工作目录: " + workDir
+				if outLen > lastOutLen {
+					extra += fmt.Sprintf("\n输出: %d 字节 (活跃)", outLen)
+				} else if outLen > 0 {
+					extra += fmt.Sprintf("\n输出: %d 字节 (等待中)", outLen)
+				}
+				lastOutLen = outLen
 				appendEvent(runDir, eventEntry{
 					Ts:         time.Now().UTC().Format(time.RFC3339),
 					RunID:      runID,
@@ -101,7 +110,7 @@ func runCC(root, runID, sessionID, mode string) {
 					Stage:      mode + "_running",
 					ElapsedSec: elapsed,
 				})
-				sendCallback(runDir, heartbeatMsg("CC", runID, elapsed, "工作目录: "+workDir))
+				sendCallback(runDir, heartbeatMsg("CC", runID, elapsed, extra))
 			case <-done:
 				return
 			}

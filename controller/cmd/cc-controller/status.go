@@ -102,7 +102,11 @@ func showRun(root, runID, kind string) {
 		}
 	}
 	if runID == "" {
-		runID = findLatestRun(runsRoot)
+		sessionID := currentSessionID(root)
+		runID = findLatestMeaningfulRunForSession(runsRoot, "", sessionID)
+		if runID == "" {
+			runID = findLatestRun(runsRoot)
+		}
 		if runID == "" {
 			fmt.Fprintln(os.Stderr, "没有任何 run 记录")
 			os.Exit(1)
@@ -319,6 +323,7 @@ func formatStatusShort(root string) string {
 	fmt.Fprintf(&sb, "📂 %s  %s\n", p.Name, p.WorkDir)
 
 	active := findActiveRuns(runsRoot)
+	pruned := queuePrune(root)
 	queueEntries := readQueue(root)
 	if len(active) > 0 {
 		latest := active[0]
@@ -327,7 +332,10 @@ func formatStatusShort(root string) string {
 		fmt.Fprintf(&sb, "▶ 活动 0 个")
 	}
 	if len(queueEntries) > 0 {
-		fmt.Fprintf(&sb, " | 排队 %d", len(queueEntries))
+		fmt.Fprintf(&sb, " | 待确认 %d", len(queueEntries))
+	}
+	if pruned > 0 {
+		fmt.Fprintf(&sb, " (已清理 %d 过期)", pruned)
 	}
 	sb.WriteString("\n")
 
@@ -388,7 +396,11 @@ func cmdStatus(root string) {
 	fmt.Printf("Session: %s\n", session)
 	fmt.Println()
 
-	// ── Waiting queue ──
+	// ── Waiting queue (auto-prune stale entries) ──
+	pruned := queuePrune(root)
+	if pruned > 0 {
+		fmt.Printf("(已自动清理 %d 个过期待确认任务)\n", pruned)
+	}
 	fmt.Println(describeQueue(root))
 	fmt.Println()
 
