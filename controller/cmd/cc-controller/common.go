@@ -93,6 +93,14 @@ func sendCallback(runDir, message string) {
 			errMsg += " stderr: " + strings.TrimSpace(s)
 		}
 		logCallbackError(runDir, errMsg)
+
+		runID := filepath.Base(runDir)
+		fallback := fmt.Sprintf("✅ 任务已完成，但结果发送失败（消息可能过长）。\n/结果 %s 查看完整内容", runID)
+		retry := exec.Command(ccConnect, "send", "--stdin", "-p", project)
+		retry.Stdin = strings.NewReader(fallback)
+		if retryErr := retry.Run(); retryErr != nil {
+			logCallbackError(runDir, "fallback send also failed: "+retryErr.Error())
+		}
 	}
 }
 
