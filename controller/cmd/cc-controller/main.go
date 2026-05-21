@@ -135,6 +135,10 @@ func main() {
 		cmdMonitor(root)
 	case "research-monitor":
 		cmdResearchMonitor(root, args)
+	case "review-local":
+		cmdReviewLocal(root, args)
+	case "memory-draft":
+		cmdMemoryDraft(root, args)
 	case "status":
 		full := false
 		for _, a := range args {
@@ -198,6 +202,10 @@ Commands:
                                 (provides default backend + focused prompt)
            [--file <path>]      Read diff from file (default: stdin)
            [--format json]      Output format (default: json)
+  review-local [preset]   Review local git diff via DeepSeek/GLM
+                          Presets: security (default), routing, general
+  memory-draft [mode]     Generate memory/progress draft via GLM
+                          Modes: summary, record, status
   research-monitor        Scan research project for job status (Python/R/GROMACS)
            [--detector <name>]  Filter to specific detector
   status                  Show condensed status (default, mobile-friendly)
