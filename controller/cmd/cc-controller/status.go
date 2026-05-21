@@ -94,21 +94,18 @@ func writeJSON(path string, v interface{}) {
 
 func showRun(root, runID, kind string) {
 	runsRoot := filepath.Join(root, "runs")
+	sessionID := currentSessionID(root)
 	if runID == "" && kind != "" {
-		runID = findLatestRunByKind(runsRoot, kind)
+		runID = findLatestRunByKindForSession(runsRoot, kind, sessionID)
 		if runID == "" {
-			fmt.Fprintf(os.Stderr, "没有 %s 类型的 run 记录\n", kind)
+			fmt.Fprintf(os.Stderr, "当前项目没有 %s 类型的 run 记录\n", kind)
 			os.Exit(1)
 		}
 	}
 	if runID == "" {
-		sessionID := currentSessionID(root)
 		runID = findLatestMeaningfulRunForSession(runsRoot, "", sessionID)
 		if runID == "" {
-			runID = findLatestRun(runsRoot)
-		}
-		if runID == "" {
-			fmt.Fprintln(os.Stderr, "没有任何 run 记录")
+			fmt.Fprintln(os.Stderr, "当前项目暂无结果")
 			os.Exit(1)
 		}
 	}
@@ -134,15 +131,27 @@ func showRun(root, runID, kind string) {
 }
 
 func findLatestRunByKind(runsRoot, kind string) string {
+	return findLatestRunByKindForSession(runsRoot, kind, "")
+}
+
+func findLatestRunByKindForSession(runsRoot, kind, sessionID string) string {
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
 		return ""
 	}
 	var dirs []string
 	for _, e := range entries {
-		if e.IsDir() && runIDPattern.MatchString(e.Name()) && strings.Contains(e.Name(), kind) {
-			dirs = append(dirs, e.Name())
+		if !e.IsDir() || !runIDPattern.MatchString(e.Name()) || !strings.Contains(e.Name(), kind) {
+			continue
 		}
+		if sessionID != "" {
+			runDir := filepath.Join(runsRoot, e.Name())
+			s := readStatusJSON(runDir)
+			if s.SessionID != "" && s.SessionID != sessionID {
+				continue
+			}
+		}
+		dirs = append(dirs, e.Name())
 	}
 	if len(dirs) == 0 {
 		return ""
@@ -339,7 +348,7 @@ func formatStatusShort(root string) string {
 	}
 	sb.WriteString("\n")
 
-	latestDone := findLatestCompletedRun(runsRoot)
+	latestDone := findLatestCompletedRunForSession(runsRoot, currentSessionID(root))
 	if latestDone.RunID != "" {
 		result := latestDone.Status
 		if latestDone.Question != "" {
@@ -361,6 +370,10 @@ func cmdStatusShort(root string) {
 }
 
 func findLatestCompletedRun(runsRoot string) runSummary {
+	return findLatestCompletedRunForSession(runsRoot, "")
+}
+
+func findLatestCompletedRunForSession(runsRoot, sessionID string) runSummary {
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
 		return runSummary{}
@@ -371,14 +384,20 @@ func findLatestCompletedRun(runsRoot string) runSummary {
 			dirs = append(dirs, e.Name())
 		}
 	}
-	// Sort newest first
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i] > dirs[j] })
 	for _, d := range dirs {
 		runDir := filepath.Join(runsRoot, d)
 		st := runStatus(runDir)
-		if st == "DONE" || st == "CANCELLED" || strings.HasPrefix(st, "FAILED") {
-			return summarizeRun(runDir, d)
+		if st != "DONE" && st != "CANCELLED" && !strings.HasPrefix(st, "FAILED") {
+			continue
 		}
+		if sessionID != "" {
+			s := readStatusJSON(runDir)
+			if s.SessionID != "" && s.SessionID != sessionID {
+				continue
+			}
+		}
+		return summarizeRun(runDir, d)
 	}
 	return runSummary{}
 }
