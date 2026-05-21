@@ -61,7 +61,7 @@ func sendCallback(runDir, message string) {
 	var ccConnect string
 	if exe, exeErr := os.Executable(); exeErr == nil {
 		dir := filepath.Dir(exe)
-		for _, name := range []string{"cc-connect-fork-v4b.exe", "cc-connect-fork-v4.exe", "cc-connect-fork-v3.exe", "cc-connect-fork.exe"} {
+		for _, name := range []string{"cc-connect-fork-v4c.exe", "cc-connect-fork-v4b.exe", "cc-connect-fork-v4.exe", "cc-connect-fork-v3.exe", "cc-connect-fork.exe"} {
 			c := filepath.Join(dir, "..", "cc-connect", name)
 			if _, err := os.Stat(c); err == nil {
 				ccConnect = c
