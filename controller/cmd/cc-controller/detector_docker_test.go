@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import "testing"
 
@@ -9,21 +9,21 @@ func TestIsUnderRoot(t *testing.T) {
 		root  string
 		want  bool
 	}{
-		{"exact match", `G:\proteinwork\work-9`, `G:\proteinwork\work-9`, true},
-		{"subdirectory", `G:\proteinwork\work-9\haddock`, `G:\proteinwork\work-9`, true},
-		{"deep subdirectory", `G:\proteinwork\work-9\a\b\c`, `G:\proteinwork\work-9`, true},
+		{"exact match", `D:\research-work\work-9`, `D:\research-work\work-9`, true},
+		{"subdirectory", `D:\research-work\work-9\haddock`, `D:\research-work\work-9`, true},
+		{"deep subdirectory", `D:\research-work\work-9\a\b\c`, `D:\research-work\work-9`, true},
 
-		{"sibling directory", `G:\proteinwork\work-11`, `G:\proteinwork\work-9`, false},
-		{"prefix but not subdir", `G:\proteinwork\work-99`, `G:\proteinwork\work-9`, false},
-		{"completely different", `D:\other\path`, `G:\proteinwork\work-9`, false},
+		{"sibling directory", `D:\research-work\work-11`, `D:\research-work\work-9`, false},
+		{"prefix but not subdir", `D:\research-work\work-99`, `D:\research-work\work-9`, false},
+		{"completely different", `D:\other\path`, `D:\research-work\work-9`, false},
 
-		{"case insensitive", `g:\Proteinwork\Work-9\test`, `G:\proteinwork\work-9`, true},
+		{"case insensitive", `D:\research-work\Work-9\test`, `D:\research-work\work-9`, true},
 
-		{"forward slashes", `G:/proteinwork/work-9/test`, `G:\proteinwork\work-9`, true},
-		{"mixed slashes", `G:/proteinwork\work-9/test`, `G:\proteinwork\work-9`, true},
+		{"forward slashes", `D:/research-work/work-9/test`, `D:\research-work\work-9`, true},
+		{"mixed slashes", `D:/research-work\work-9/test`, `D:\research-work\work-9`, true},
 
-		{"empty mount", "", `G:\proteinwork\work-9`, false},
-		{"empty root", `G:\proteinwork\work-9`, "", false},
+		{"empty mount", "", `D:\research-work\work-9`, false},
+		{"empty root", `D:\research-work\work-9`, "", false},
 		{"both empty", "", "", false},
 	}
 	for _, tt := range tests {
@@ -36,3 +36,5 @@ func TestIsUnderRoot(t *testing.T) {
 		})
 	}
 }
+
+

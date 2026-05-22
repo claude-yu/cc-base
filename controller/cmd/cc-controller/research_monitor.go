@@ -85,6 +85,13 @@ func cmdResearchMonitor(root string, args []string) {
 
 	subcmd := strings.TrimSpace(strings.Join(positional, " "))
 
+	if filterDetector == "" && subcmd != "" {
+		if canonical := resolveDetectorAlias(subcmd); canonical != "" {
+			filterDetector = canonical
+			subcmd = ""
+		}
+	}
+
 	switch {
 	case subcmd == "" || subcmd == "刷新":
 		doFullScan(root, filterDetector, outputFormat)

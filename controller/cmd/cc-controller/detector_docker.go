@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -103,37 +103,37 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 	if len(short) > 12 {
 		short = short[:12]
 	}
-	rs.Evidence = append(rs.Evidence, "容器: "+c.Names+" ("+short+")")
-	rs.Evidence = append(rs.Evidence, "镜像: "+c.Image)
+	rs.Evidence = append(rs.Evidence, "瀹瑰櫒: "+c.Names+" ("+short+")")
+	rs.Evidence = append(rs.Evidence, "闀滃儚: "+c.Image)
 
 	cmd := strings.Trim(c.Command, "\"")
 	if len(cmd) > 80 {
 		cmd = cmd[:80] + "..."
 	}
-	rs.Evidence = append(rs.Evidence, "命令: "+cmd)
+	rs.Evidence = append(rs.Evidence, "鍛戒护: "+cmd)
 
 	switch c.State {
 	case "running":
 		rs.State = "running"
-		rs.Evidence = append(rs.Evidence, "状态: "+c.Status)
+		rs.Evidence = append(rs.Evidence, "鐘舵€? "+c.Status)
 	case "exited":
 		exitCode := extractExitCode(c.Status)
 		if exitCode == 0 {
 			rs.State = "completed"
-			rs.Evidence = append(rs.Evidence, "状态: 正常退出 (code 0), "+c.Status)
+			rs.Evidence = append(rs.Evidence, "鐘舵€? 姝ｅ父閫€鍑?(code 0), "+c.Status)
 		} else {
 			rs.State = "failed"
 			rs.Confidence = "high"
-			rs.Evidence = append(rs.Evidence, "状态: 异常退出 (code "+itoa(exitCode)+"), "+c.Status)
+			rs.Evidence = append(rs.Evidence, "鐘舵€? 寮傚父閫€鍑?(code "+itoa(exitCode)+"), "+c.Status)
 		}
 	case "dead":
 		rs.State = "failed"
 		rs.Confidence = "high"
-		rs.Evidence = append(rs.Evidence, "状态: dead — "+c.Status)
+		rs.Evidence = append(rs.Evidence, "鐘舵€? dead 鈥?"+c.Status)
 	default:
 		rs.State = "unknown"
 		rs.Confidence = "low"
-		rs.Evidence = append(rs.Evidence, "状态: "+c.State+" — "+c.Status)
+		rs.Evidence = append(rs.Evidence, "鐘舵€? "+c.State+" 鈥?"+c.Status)
 	}
 
 	// Read container logs tail (only for running or recently exited)
@@ -152,13 +152,13 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 				if len(last) > 100 {
 					last = last[:100] + "..."
 				}
-				rs.Evidence = append(rs.Evidence, "最新日志: "+last)
+				rs.Evidence = append(rs.Evidence, "鏈€鏂版棩蹇? "+last)
 			}
 		}
 	}
 
 	if rs.WorkDir != "" {
-		rs.Evidence = append(rs.Evidence, "挂载目录: "+rs.WorkDir)
+		rs.Evidence = append(rs.Evidence, "鎸傝浇鐩綍: "+rs.WorkDir)
 	}
 	rs.KeyFiles = []string{c.Names}
 	rs.LastUpdate = c.Status
@@ -168,8 +168,8 @@ func inspectDockerContainer(c dockerContainer) ResearchStatus {
 }
 
 func parseDockerAgeMins(status string) int {
-	// "Exited (255) 4 days ago" → strip "(255)" → parse "4 days" → 5760 min
-	// "Up 5 hours" → 300 min
+	// "Exited (255) 4 days ago" 鈫?strip "(255)" 鈫?parse "4 days" 鈫?5760 min
+	// "Up 5 hours" 鈫?300 min
 	cleaned := status
 	for {
 		start := strings.Index(cleaned, "(")
@@ -228,8 +228,8 @@ func readDockerLogs(containerID string, lines int) []string {
 }
 
 func extractImageShort(image string) string {
-	// "ghcr.io/haddocking/haddock3:latest" → "haddock3"
-	// "prosettac-local" → "prosettac-local"
+	// "ghcr.io/haddocking/haddock3:latest" 鈫?"haddock3"
+	// "prosettac-local" 鈫?"prosettac-local"
 	parts := strings.Split(image, "/")
 	last := parts[len(parts)-1]
 	if idx := strings.Index(last, ":"); idx > 0 {
@@ -239,7 +239,7 @@ func extractImageShort(image string) string {
 }
 
 func extractBindMount(labels string) string {
-	// Docker Desktop labels: desktop.docker.io/binds/0/Source=G:\proteinwork\...
+	// Docker Desktop labels: desktop.docker.io/binds/0/Source=D:\research-work\...
 	for _, label := range strings.Split(labels, ",") {
 		if strings.Contains(label, "binds/") && strings.Contains(label, "/Source=") {
 			if idx := strings.Index(label, "="); idx > 0 {
@@ -251,8 +251,8 @@ func extractBindMount(labels string) string {
 }
 
 func extractExitCode(status string) int {
-	// "Exited (0) 2 days ago" → 0
-	// "Exited (137) 4 days ago" → 137
+	// "Exited (0) 2 days ago" 鈫?0
+	// "Exited (137) 4 days ago" 鈫?137
 	idx := strings.Index(status, "(")
 	if idx < 0 {
 		return -1
@@ -263,4 +263,5 @@ func extractExitCode(status string) int {
 	}
 	return atoiSafe(status[idx+1 : idx+end])
 }
+
 

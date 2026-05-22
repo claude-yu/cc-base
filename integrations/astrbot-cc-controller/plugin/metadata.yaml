@@ -1,0 +1,8 @@
+﻿name: astrbot_cc_controller
+display_name: 绉戠爺鐩戞帶 (cc-controller)
+desc: 鍙绉戠爺鐩戞帶 + 璁板繂绠″鎻掍欢锛岄涔︿腑鏌ヨ浠诲姟鐘舵€併€佹煡鐪嬭蹇嗙姸鎬併€佹彁渚涜鍒よ崏妗?杞/璁板綍/褰掓。/recap 妯℃澘
+version: 0.1.0
+author: cc-base contributors
+support_platforms:
+  - lark
+

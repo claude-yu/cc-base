@@ -1,343 +1,239 @@
-# cc-base Mobile Agent Next Plan
+﻿# cc-base Mobile Agent Next Plan
 
 ## Summary
 
-本计划用于修复当前微信/QQ 移动端 agent 交互的剩余问题。目标不是重写整个系统，而是把已经验证可用的 Go `cc-controller` 路径补齐：命令可发现、回调回到正确渠道、输出无污染、配置可从 GitHub 模板恢复。
+鏈鍒掔敤浜庝慨澶嶅綋鍓嶅井淇?QQ 绉诲姩绔?agent 浜や簰鐨勫墿浣欓棶棰樸€傜洰鏍囦笉鏄噸鍐欐暣涓郴缁燂紝鑰屾槸鎶婂凡缁忛獙璇佸彲鐢ㄧ殑 Go `cc-controller` 璺緞琛ラ綈锛氬懡浠ゅ彲鍙戠幇銆佸洖璋冨洖鍒版纭笭閬撱€佽緭鍑烘棤姹℃煋銆侀厤缃彲浠?GitHub 妯℃澘鎭㈠銆?
+褰撳墠宸查獙璇佽兘鍔涳細
 
-当前已验证能力：
-
-- `/cc` 是 session-aware，对话上下文可延续。
-- `/状态` 可查看项目、session、等待队列、活动任务和最近 run。
-- 执行型任务会先生成确认卡，`/执行 RunId` 或唯一等待任务时回复 `好/ok/可以/确认` 可执行。
-- `CC_EXECUTE_WORK_DIR` 沙盒执行已验证，可把文件创建到 `E:\ai\selfwork_ytl\test`。
-- `/项目`、`/切项目` 已支持多项目工作目录。
-
-当前剩余问题：
-
-- ~~`/查看`、`/勘察` 不是 cc-connect command~~ → **已修复 2026-05-19**：新增 `[[commands]]`
-- ~~Codex 回答里混入 `taskkill` 成功信息~~ → **已修复 2026-05-19**：codex.go 过滤 + 单测
-- ~~cc-base skill 模板与本机配置漂移~~ → **已修复 2026-05-19**：反向同步 + 脱敏
-- QQ Codex 回调可能回错渠道（`--reply-project` 隔离未实现）
-- CC_MODEL 默认值未在 controller 层面传递 → **已修复 2026-05-19**：cc.go + start.ps1
+- `/cc` 鏄?session-aware锛屽璇濅笂涓嬫枃鍙欢缁€?- `/鐘舵€乣 鍙煡鐪嬮」鐩€乻ession銆佺瓑寰呴槦鍒椼€佹椿鍔ㄤ换鍔″拰鏈€杩?run銆?- 鎵ц鍨嬩换鍔′細鍏堢敓鎴愮‘璁ゅ崱锛宍/鎵ц RunId` 鎴栧敮涓€绛夊緟浠诲姟鏃跺洖澶?`濂?ok/鍙互/纭` 鍙墽琛屻€?- `CC_EXECUTE_WORK_DIR` 娌欑洅鎵ц宸查獙璇侊紝鍙妸鏂囦欢鍒涘缓鍒?`C:\path\to\cc-base\test`銆?- `/椤圭洰`銆乣/鍒囬」鐩甡 宸叉敮鎸佸椤圭洰宸ヤ綔鐩綍銆?
+褰撳墠鍓╀綑闂锛?
+- ~~`/鏌ョ湅`銆乣/鍕樺療` 涓嶆槸 cc-connect command~~ 鈫?**宸蹭慨澶?2026-05-19**锛氭柊澧?`[[commands]]`
+- ~~Codex 鍥炵瓟閲屾贩鍏?`taskkill` 鎴愬姛淇℃伅~~ 鈫?**宸蹭慨澶?2026-05-19**锛歝odex.go 杩囨护 + 鍗曟祴
+- ~~cc-base skill 妯℃澘涓庢湰鏈洪厤缃紓绉粇~ 鈫?**宸蹭慨澶?2026-05-19**锛氬弽鍚戝悓姝?+ 鑴辨晱
+- QQ Codex 鍥炶皟鍙兘鍥為敊娓犻亾锛坄--reply-project` 闅旂鏈疄鐜帮級
+- CC_MODEL 榛樿鍊兼湭鍦?controller 灞傞潰浼犻€?鈫?**宸蹭慨澶?2026-05-19**锛歝c.go + start.ps1
 
 ## Scope
 
-只处理移动端交互可靠性，不做以下事情：
+鍙鐞嗙Щ鍔ㄧ浜や簰鍙潬鎬э紝涓嶅仛浠ヤ笅浜嬫儏锛?
+- 涓嶉噸鍐?cc-connect銆?- 涓嶆敼 Claude/Codex 妯″瀷璋冪敤绛栫暐銆?- 涓嶅疄鐜板畬鏁村骞冲彴娑堟伅鎬荤嚎銆?- 涓嶆妸鏅€氳嚜鐒惰瑷€ fallback 鍏ㄩ儴鎺ョ鍒?Go router銆?
+## Step 1: 鎭㈠ `/鏌ョ湅` 鍜屽父鐢ㄧ姸鎬佸埆鍚?鉁?宸插畬鎴?
+### 闂
 
-- 不重写 cc-connect。
-- 不改 Claude/Codex 模型调用策略。
-- 不实现完整多平台消息总线。
-- 不把普通自然语言 fallback 全部接管到 Go router。
+cc-connect v1.3.2 鐨?`[[aliases]]` 涓嶅尮閰?`/` 鍓嶇紑娑堟伅銆俙/鏌ョ湅` 濡傛灉鍙啓 alias锛屼細琚綋鎴愭湭鐭ュ懡浠よ浆缁?Agent銆?
+### 淇敼
 
-## Step 1: 恢复 `/查看` 和常用状态别名 ✅ 已完成
+鍦ㄤ互涓嬮厤缃腑鏂板鐪熷疄 `[[commands]]`锛?
+- `C:\path\to\cc-base\cc-connect\config.toml`
+- `%USERPROFILE%\.cc-connect\config.toml`
+- `C:\path\to\cc-base\scripts\config.toml.template`
 
-### 问题
-
-cc-connect v1.3.2 的 `[[aliases]]` 不匹配 `/` 前缀消息。`/查看` 如果只写 alias，会被当成未知命令转给 Agent。
-
-### 修改
-
-在以下配置中新增真实 `[[commands]]`：
-
-- `E:\ai\selfwork_ytl\cc-connect\config.toml`
-- `C:\Users\tian\.cc-connect\config.toml`
-- `C:\Users\tian\.claude\skills\cc-base\scripts\config.toml.template`
-
-新增命令：
-
+鏂板鍛戒护锛?
 ```toml
 [[commands]]
-name = "查看"
-description = "查看当前系统状态、项目、等待队列和最近任务"
+name = "鏌ョ湅"
+description = "鏌ョ湅褰撳墠绯荤粺鐘舵€併€侀」鐩€佺瓑寰呴槦鍒楀拰鏈€杩戜换鍔?
 exec = "E:\\ai\\selfwork_ytl\\controller\\cc-controller.exe status"
 
 [[commands]]
-name = "勘察"
-description = "查看当前系统状态、项目、等待队列和最近任务"
+name = "鍕樺療"
+description = "鏌ョ湅褰撳墠绯荤粺鐘舵€併€侀」鐩€佺瓑寰呴槦鍒楀拰鏈€杩戜换鍔?
 exec = "E:\\ai\\selfwork_ytl\\controller\\cc-controller.exe status"
 
 [[commands]]
-name = "看看"
-description = "查看当前系统状态、项目、等待队列和最近任务"
+name = "鐪嬬湅"
+description = "鏌ョ湅褰撳墠绯荤粺鐘舵€併€侀」鐩€佺瓑寰呴槦鍒楀拰鏈€杩戜换鍔?
 exec = "E:\\ai\\selfwork_ytl\\controller\\cc-controller.exe status"
 ```
 
-模板中使用占位路径：
+妯℃澘涓娇鐢ㄥ崰浣嶈矾寰勶細
 
 ```toml
 exec = "YOUR_PROJECT_ROOT\\controller\\cc-controller.exe status"
 ```
 
-保留 `/状态`，把 `/查看`、`/勘察`、`/看看` 都作为真实 command，不依赖 alias。
+淇濈暀 `/鐘舵€乣锛屾妸 `/鏌ョ湅`銆乣/鍕樺療`銆乣/鐪嬬湅` 閮戒綔涓虹湡瀹?command锛屼笉渚濊禆 alias銆?
+### 楠岃瘉
 
-### 验证
-
-微信和 QQ 各发送：
-
-```text
-/查看
-/勘察
-/看看
-/状态
-```
-
-预期：
-
-- 都返回同一类系统状态。
-- 不再出现 `不是 cc-connect 命令`。
-- 不再触发 `Invalid signature in thinking block`。
-
-## Step 2: 修复 QQ Codex 通道 — 部分完成
-
-### 问题
-
-当前 config 中 Codex/QQ project 仍存在，但用户报告“大号 QQ 给小号 QQ Codex 消息不行”。可能原因有三类：
-
-1. QQ 发送者不匹配 `allow_from`。
-2. `发给codex` 已从旧 direct codex project 改成 `/问codex`，但 QQ 平台没有正确加载新 command。
-3. `cc-controller` 回调写死发到 `cc` project，导致 QQ 触发的 Codex 最终结果回到微信或其他通道。
-
-### 修改
-
-先不改大架构，按最小路径修复：
-
-1. 确认 QQ project 仍配置：
-   - platform/provider 是 QQ/OneBot。
-   - `allow_from` 包含大号 QQ。
-   - `[[aliases]]` 中 Codex/GPT alias 只映射到 `/问codex`。
-2. 确认 `[[commands]] name = "问codex"` 在部署 config 中存在，且 exec 指向：
+寰俊鍜?QQ 鍚勫彂閫侊細
 
 ```text
-E:\ai\selfwork_ytl\controller\cc-controller.exe ask-codex {{args}}
+/鏌ョ湅
+/鍕樺療
+/鐪嬬湅
+/鐘舵€?```
+
+棰勬湡锛?
+- 閮借繑鍥炲悓涓€绫荤郴缁熺姸鎬併€?- 涓嶅啀鍑虹幇 `涓嶆槸 cc-connect 鍛戒护`銆?- 涓嶅啀瑙﹀彂 `Invalid signature in thinking block`銆?
+## Step 2: 淇 QQ Codex 閫氶亾 鈥?閮ㄥ垎瀹屾垚
+
+### 闂
+
+褰撳墠 config 涓?Codex/QQ project 浠嶅瓨鍦紝浣嗙敤鎴锋姤鍛娾€滃ぇ鍙?QQ 缁欏皬鍙?QQ Codex 娑堟伅涓嶈鈥濄€傚彲鑳藉師鍥犳湁涓夌被锛?
+1. QQ 鍙戦€佽€呬笉鍖归厤 `allow_from`銆?2. `鍙戠粰codex` 宸蹭粠鏃?direct codex project 鏀规垚 `/闂甤odex`锛屼絾 QQ 骞冲彴娌℃湁姝ｇ‘鍔犺浇鏂?command銆?3. `cc-controller` 鍥炶皟鍐欐鍙戝埌 `cc` project锛屽鑷?QQ 瑙﹀彂鐨?Codex 鏈€缁堢粨鏋滃洖鍒板井淇℃垨鍏朵粬閫氶亾銆?
+### 淇敼
+
+鍏堜笉鏀瑰ぇ鏋舵瀯锛屾寜鏈€灏忚矾寰勪慨澶嶏細
+
+1. 纭 QQ project 浠嶉厤缃細
+   - platform/provider 鏄?QQ/OneBot銆?   - `allow_from` 鍖呭惈澶у彿 QQ銆?   - `[[aliases]]` 涓?Codex/GPT alias 鍙槧灏勫埌 `/闂甤odex`銆?2. 纭 `[[commands]] name = "闂甤odex"` 鍦ㄩ儴缃?config 涓瓨鍦紝涓?exec 鎸囧悜锛?
+```text
+C:\path\to\cc-base\controller\cc-controller.exe ask-codex {{args}}
 ```
 
-3. 给 `ask-codex` 增加 source-aware callback 参数，避免硬编码回 `cc`：
-
+3. 缁?`ask-codex` 澧炲姞 source-aware callback 鍙傛暟锛岄伩鍏嶇‖缂栫爜鍥?`cc`锛?
 ```text
 cc-controller.exe ask-codex --reply-project codex {{args}}
 ```
 
-如果 cc-connect 无法传入来源 project，则先在 QQ/codex 项目的 command 里固定 `--reply-project codex`，微信/cc 项目的 command 固定 `--reply-project cc`。
+濡傛灉 cc-connect 鏃犳硶浼犲叆鏉ユ簮 project锛屽垯鍏堝湪 QQ/codex 椤圭洰鐨?command 閲屽浐瀹?`--reply-project codex`锛屽井淇?cc 椤圭洰鐨?command 鍥哄畾 `--reply-project cc`銆?
+### 楠岃瘉
 
-### 验证
+浠?QQ 澶у彿鍙戠粰 QQ 灏忓彿锛?
+```text
+/鐘舵€?鍙戠粰codex 2+2绛変簬鍑?```
 
-从 QQ 大号发给 QQ 小号：
+棰勬湡锛?
+- `/鐘舵€乣 鍦?QQ 杩斿洖銆?- Codex 鍚姩娑堟伅鍦?QQ 杩斿洖銆?- Codex 鏈€缁堢瓟妗堜篃鍦?QQ 杩斿洖銆?- 寰俊涓嶆敹鍒拌繖娆?QQ 瑙﹀彂鐨?Codex 鍥炶皟銆?
+## Step 3: 娓呯悊 Codex 杈撳嚭閲岀殑 taskkill 鍣煶鍜屼贡鐮?鉁?宸插畬鎴?
+### 闂
+
+Codex 鍥炵瓟涓嚭鐜扮被浼煎唴瀹癸細
 
 ```text
-/状态
-发给codex 2+2等于几
-```
-
-预期：
-
-- `/状态` 在 QQ 返回。
-- Codex 启动消息在 QQ 返回。
-- Codex 最终答案也在 QQ 返回。
-- 微信不收到这次 QQ 触发的 Codex 回调。
-
-## Step 3: 清理 Codex 输出里的 taskkill 噪音和乱码 ✅ 已完成
-
-### 问题
-
-Codex 回答中出现类似内容：
-
-```text
-�ɹ�: ����ֹ PID ...
+锟缴癸拷: 锟斤拷锟斤拷止 PID ...
 SUCCESS: The process with PID ...
 ```
 
-这是 cleanup/taskkill 的 stdout/stderr 混入了模型答案。它不是 Codex 内容，也不应该进入用户回调。
+杩欐槸 cleanup/taskkill 鐨?stdout/stderr 娣峰叆浜嗘ā鍨嬬瓟妗堛€傚畠涓嶆槸 Codex 鍐呭锛屼篃涓嶅簲璇ヨ繘鍏ョ敤鎴峰洖璋冦€?
+### 淇敼
 
-### 修改
+鍦?Go controller 涓鐞嗕袱灞傦細
 
-在 Go controller 中处理两层：
-
-1. 执行 `taskkill` 时丢弃 stdout/stderr：
-
+1. 鎵ц `taskkill` 鏃朵涪寮?stdout/stderr锛?
 ```go
 cmd.Stdout = io.Discard
 cmd.Stderr = io.Discard
 ```
 
-2. 在 Codex 输出清理函数里增加兜底过滤：
+2. 鍦?Codex 杈撳嚭娓呯悊鍑芥暟閲屽鍔犲厹搴曡繃婊わ細
 
 - `SUCCESS: The process with PID`
-- `成功: 已终止 PID`
-- mojibake 前缀 `�ɹ�:`
-- 只包含 PID 终止信息的行
+- `鎴愬姛: 宸茬粓姝?PID`
+- mojibake 鍓嶇紑 `锟缴癸拷:`
+- 鍙寘鍚?PID 缁堟淇℃伅鐨勮
 
-不要过滤真实 Codex answer。
+涓嶈杩囨护鐪熷疄 Codex answer銆?
+### 楠岃瘉
 
-### 验证
-
-运行：
-
+杩愯锛?
 ```text
-发给codex 你是什么模型
-```
+鍙戠粰codex 浣犳槸浠€涔堟ā鍨?```
 
-预期：
+棰勬湡锛?
+- 鍥炵瓟鍙寘鍚?Codex 姝ｆ枃鍜屽缓璁笅涓€姝ャ€?- 涓嶅嚭鐜?taskkill PID 琛屻€?- 涓嶅嚭鐜颁腑鏂?taskkill 涔辩爜銆?
+鏂板 Go 鍗曟祴锛?
+- 杈撳叆鍖呭惈鑻辨枃 taskkill 琛?+ 姝ｆ枃锛岃緭鍑哄彧淇濈暀姝ｆ枃銆?- 杈撳叆鍖呭惈涓枃 mojibake taskkill 琛?+ 姝ｆ枃锛岃緭鍑哄彧淇濈暀姝ｆ枃銆?
+## Step 4: 閰嶇疆鍚屾鍜屾ā鏉垮浐鍖?鉁?宸插畬鎴?
+### 闂
 
-- 回答只包含 Codex 正文和建议下一步。
-- 不出现 taskkill PID 行。
-- 不出现中文 taskkill 乱码。
+cc-base 浠?GitHub 鍚屾鍥炴潵鍚庯紝妯℃澘鍙兘缂哄皯鏈満鏂板鍛戒护锛屽鑷撮噸瑁呮垨鍚屾鍚庡姛鑳芥秷澶便€?
+### 淇敼
 
-新增 Go 单测：
+鎶婃湰鏈哄凡楠岃瘉閰嶇疆鍚屾鍥炴ā鏉匡紝浣嗘ā鏉垮繀椤昏劚鏁忥細
 
-- 输入包含英文 taskkill 行 + 正文，输出只保留正文。
-- 输入包含中文 mojibake taskkill 行 + 正文，输出只保留正文。
+- 淇濈暀 command 鍚嶇О鍜?exec 缁撴瀯銆?- 璺緞浣跨敤 `YOUR_PROJECT_ROOT`銆?- QQ/寰俊 token銆乤ccount_id銆佺湡瀹?sender ID 涓嶈繘鍏ユā鏉裤€?- `scripts/config.toml.template` 蹇呴』鍖呭惈锛?  - `/cc`
+  - `/鐘舵€乣
+  - `/鏌ョ湅`
+  - `/鍕樺療`
+  - `/鐪嬬湅`
+  - `/闂甤odex`
+  - `/codex缁撴灉`
+  - `/鎵ц`
+  - `/鍙栨秷`
+  - `/椤圭洰`
+  - `/鍒囬」鐩甡
+  - `ok/濂?鍙互/纭` alias 鍒?`/鎵ц`
+  - Codex/GPT alias 鍒?`/闂甤odex`
+  - CC/Opus alias 鍒?`/cc`
 
-## Step 4: 配置同步和模板固化 ✅ 已完成
+### 楠岃瘉
 
-### 问题
-
-cc-base 从 GitHub 同步回来后，模板可能缺少本机新增命令，导致重装或同步后功能消失。
-
-### 修改
-
-把本机已验证配置同步回模板，但模板必须脱敏：
-
-- 保留 command 名称和 exec 结构。
-- 路径使用 `YOUR_PROJECT_ROOT`。
-- QQ/微信 token、account_id、真实 sender ID 不进入模板。
-- `scripts/config.toml.template` 必须包含：
-  - `/cc`
-  - `/状态`
-  - `/查看`
-  - `/勘察`
-  - `/看看`
-  - `/问codex`
-  - `/codex结果`
-  - `/执行`
-  - `/取消`
-  - `/项目`
-  - `/切项目`
-  - `ok/好/可以/确认` alias 到 `/执行`
-  - Codex/GPT alias 到 `/问codex`
-  - CC/Opus alias 到 `/cc`
-
-### 验证
-
-在 cc-base 仓库扫描：
-
+鍦?cc-base 浠撳簱鎵弿锛?
 ```powershell
-Select-String -Path .\**\* -Pattern "ilinkai|wx_token|account_id = `"[真实值]|G:\\proteinwork|E:\\ai\\selfwork_ytl|:7890|:7891"
+Select-String -Path .\**\* -Pattern "ilinkai|wx_token|account_id|D:\\research-work|C:\\cc-base|:7890|:7891"
 ```
 
-预期：
+棰勬湡锛?
+- 涓嶅嚭鐜扮湡瀹?token銆佺湡瀹?account_id銆佺湡瀹炴湰鏈烘晱鎰熻矾寰勩€?- 妯℃澘鍙嚭鐜板崰浣嶇銆?
+## Step 5: 鏂囨。鏇存柊 鈥?閮ㄥ垎瀹屾垚
 
-- 不出现真实 token、真实 account_id、真实本机敏感路径。
-- 模板只出现占位符。
+### 淇敼
 
-## Step 5: 文档更新 — 部分完成
-
-### 修改
-
-更新以下文件：
-
+鏇存柊浠ヤ笅鏂囦欢锛?
 - `SKILL.md`
 - `README.md`
 - `docs/qq-setup.md`
 - `docs/config-management.md`
 
-必须写清楚：
+蹇呴』鍐欐竻妤氾細
 
-- `/查看` 是真实 command，不是 alias。
-- `/状态` 和 `/查看` 等价。
-- QQ Codex 回调必须回到 QQ project，不应硬编码到微信 `cc` project。
-- `发给cc/问cc/opus` 走 session-aware `/cc`。
-- `发给codex/问codex/gpt` 走 `/问codex`。
-- 执行任务的短确认：`ok/好/可以/确认` 只在唯一 waiting 任务时自动执行；多个 waiting 时必须 `/执行 1` 或 `/执行 RunId`。
-
-## Step 6: 最终验收清单
-
-### 微信端
-
+- `/鏌ョ湅` 鏄湡瀹?command锛屼笉鏄?alias銆?- `/鐘舵€乣 鍜?`/鏌ョ湅` 绛変环銆?- QQ Codex 鍥炶皟蹇呴』鍥炲埌 QQ project锛屼笉搴旂‖缂栫爜鍒板井淇?`cc` project銆?- `鍙戠粰cc/闂甤c/opus` 璧?session-aware `/cc`銆?- `鍙戠粰codex/闂甤odex/gpt` 璧?`/闂甤odex`銆?- 鎵ц浠诲姟鐨勭煭纭锛歚ok/濂?鍙互/纭` 鍙湪鍞竴 waiting 浠诲姟鏃惰嚜鍔ㄦ墽琛岋紱澶氫釜 waiting 鏃跺繀椤?`/鎵ц 1` 鎴?`/鎵ц RunId`銆?
+## Step 6: 鏈€缁堥獙鏀舵竻鍗?
+### 寰俊绔?
 ```text
-/查看
-/cc 我叫李四，记住
-/cc 我叫什么？
-/cc 创建文件 mobile-ok.txt
-好
-```
+/鏌ョ湅
+/cc 鎴戝彨鏉庡洓锛岃浣?/cc 鎴戝彨浠€涔堬紵
+/cc 鍒涘缓鏂囦欢 mobile-ok.txt
+濂?```
 
-预期：
-
-- `/查看` 正常返回状态。
-- `/cc` 能记住同一 session 内上下文。
-- 执行确认卡显示真实 `CC_EXECUTE_WORK_DIR`。
-- `好` 能执行唯一等待任务。
-
-### QQ Codex 端
-
+棰勬湡锛?
+- `/鏌ョ湅` 姝ｅ父杩斿洖鐘舵€併€?- `/cc` 鑳借浣忓悓涓€ session 鍐呬笂涓嬫枃銆?- 鎵ц纭鍗℃樉绀虹湡瀹?`CC_EXECUTE_WORK_DIR`銆?- `濂絗 鑳芥墽琛屽敮涓€绛夊緟浠诲姟銆?
+### QQ Codex 绔?
 ```text
-/状态
-发给codex 你是什么模型
-```
+/鐘舵€?鍙戠粰codex 浣犳槸浠€涔堟ā鍨?```
 
-预期：
+棰勬湡锛?
+- QQ 鑳芥敹鍒板惎鍔ㄦ秷鎭€?- QQ 鑳芥敹鍒版渶缁?Codex 绛旀銆?- 绛旀鏃?taskkill 鍣煶銆?- 寰俊涓嶄覆鍙版敹鍒?QQ 鐨?Codex 绛旀銆?
+### 閰嶇疆鎭㈠娴嬭瘯
 
-- QQ 能收到启动消息。
-- QQ 能收到最终 Codex 答案。
-- 答案无 taskkill 噪音。
-- 微信不串台收到 QQ 的 Codex 答案。
+浠?`scripts/config.toml.template` 閲嶆柊鐢熸垚涓€浠芥祴璇?config锛屾浛鎹㈠崰浣嶇鍚庡簲鍏峰鍚岀瓑鍛戒护闆嗗悎銆?
+## Step 7: 澶氭ā鍨?QQ 璺敱锛圖eepSeek / GLM锛?
+### 鑳屾櫙
 
-### 配置恢复测试
-
-从 `scripts/config.toml.template` 重新生成一份测试 config，替换占位符后应具备同等命令集合。
-
-## Step 7: 多模型 QQ 路由（DeepSeek / GLM）
-
-### 背景
-
-config.toml 已配置三个 provider（OpenAI 已填 key，DeepSeek/GLM 留空待填）。用户希望从 QQ 分别问不同模型。
-
-### 方案候选
-
-1. **每个模型一个 cc-connect project**：QQ 里通过 `/问deepseek`、`/问glm` 命令路由到独立 project
-2. **走 cc-controller 命令路由**：加 `[[commands]]` 分别调不同模型的 CLI（类似微信 `/问codex`）
-
-### 前置条件
+config.toml 宸查厤缃笁涓?provider锛圤penAI 宸插～ key锛孌eepSeek/GLM 鐣欑┖寰呭～锛夈€傜敤鎴峰笇鏈涗粠 QQ 鍒嗗埆闂笉鍚屾ā鍨嬨€?
+### 鏂规鍊欓€?
+1. **姣忎釜妯″瀷涓€涓?cc-connect project**锛歈Q 閲岄€氳繃 `/闂甦eepseek`銆乣/闂甮lm` 鍛戒护璺敱鍒扮嫭绔?project
+2. **璧?cc-controller 鍛戒护璺敱**锛氬姞 `[[commands]]` 鍒嗗埆璋冧笉鍚屾ā鍨嬬殑 CLI锛堢被浼煎井淇?`/闂甤odex`锛?
+### 鍓嶇疆鏉′欢
 
 - DeepSeek API key
-- GLM (智谱) API key
-- 确定方案后实现路由
+- GLM (鏅鸿氨) API key
+- 纭畾鏂规鍚庡疄鐜拌矾鐢?
+### 鐘舵€?
+寰呭疄鏂斤紝API key 鍒颁綅鍚庡紑濮嬨€?
+## Step 8: CC_MODEL 鏀寔 鉁?宸插畬鎴?
+### 淇敼锛?026-05-19锛?
+- `cc.go`锛氳鍙?`CC_MODEL` 鐜鍙橀噺锛屼紶 `--model` 缁?Claude CLI
+- `start.ps1`锛氶粯璁よ缃?`CC_MODEL=claude-opus-4-6`锛屼笉褰卞搷 CLI 鍏ㄥ眬榛樿
+- `docs/env-vars.md`锛氬凡鏇存柊鏂囨。
 
-### 状态
-
-待实施，API key 到位后开始。
-
-## Step 8: CC_MODEL 支持 ✅ 已完成
-
-### 修改（2026-05-19）
-
-- `cc.go`：读取 `CC_MODEL` 环境变量，传 `--model` 给 Claude CLI
-- `start.ps1`：默认设置 `CC_MODEL=claude-opus-4-6`，不影响 CLI 全局默认
-- `docs/env-vars.md`：已更新文档
-
-## 踩坑记录（2026-05-19 QQ 接入）
-
-| 坑 | 现象 | 根因 | 修复 |
+## 韪╁潙璁板綍锛?026-05-19 QQ 鎺ュ叆锛?
+| 鍧?| 鐜拌薄 | 鏍瑰洜 | 淇 |
 |----|------|------|------|
-| NapCat WS 端口 | cc-connect `ws connect failed` | NapCat WebSocket Server 默认端口 6099 跟 WebUI 冲突 | 改为 3001 |
-| NapCat 消息格式 | 连上立刻断开 `close 1005` | 消息格式设为 Array，cc-connect 不支持 | 改为 String |
-| NapCat 启用开关 | WebSocket 不监听 | WebSocket Server 配置里"启用"未打开 | 打开启用开关 |
-| 启动时序 | cc-connect 比 NapCat 先就绪 | `docker start` 后 NapCat 需 1-3 分钟启动 | 重启 cc-connect 或 start.ps1 加 sleep |
-| API key 格式 | `${sk-proj-...}` 被解析为环境变量 | 用户把 key 放进了 `${}` 占位符里 | 直接写 key，不用 `${}` |
-| Docker 镜像名 | `napneko-docker:latest` 拉取 403 | 本地镜像是 `napcat-docker`，不是 `napneko-docker` | 用本地已有镜像名 |
+| NapCat WS 绔彛 | cc-connect `ws connect failed` | NapCat WebSocket Server 榛樿绔彛 6099 璺?WebUI 鍐茬獊 | 鏀逛负 3001 |
+| NapCat 娑堟伅鏍煎紡 | 杩炰笂绔嬪埢鏂紑 `close 1005` | 娑堟伅鏍煎紡璁句负 Array锛宑c-connect 涓嶆敮鎸?| 鏀逛负 String |
+| NapCat 鍚敤寮€鍏?| WebSocket 涓嶇洃鍚?| WebSocket Server 閰嶇疆閲?鍚敤"鏈墦寮€ | 鎵撳紑鍚敤寮€鍏?|
+| 鍚姩鏃跺簭 | cc-connect 姣?NapCat 鍏堝氨缁?| `docker start` 鍚?NapCat 闇€ 1-3 鍒嗛挓鍚姩 | 閲嶅惎 cc-connect 鎴?start.ps1 鍔?sleep |
+| API key 鏍煎紡 | `${sk-proj-...}` 琚В鏋愪负鐜鍙橀噺 | 鐢ㄦ埛鎶?key 鏀捐繘浜?`${}` 鍗犱綅绗﹂噷 | 鐩存帴鍐?key锛屼笉鐢?`${}` |
+| Docker 闀滃儚鍚?| `napneko-docker:latest` 鎷夊彇 403 | 鏈湴闀滃儚鏄?`napcat-docker`锛屼笉鏄?`napneko-docker` | 鐢ㄦ湰鍦板凡鏈夐暅鍍忓悕 |
 
-## 风险和边界
+## 椋庨櫓鍜岃竟鐣?
+- 濡傛灉 QQ OneBot/NapCat 鏈韩鏂繛锛屾湰璁″垝鍙兘璁╅厤缃纭紝涓嶈兘鏇夸唬 QQ 缃戝叧鎺掗殰銆?- 濡傛灉 cc-connect 涓嶆彁渚?source project 缁?command锛岀煭鏈熷彧鑳介€氳繃涓嶅悓 project 鐨?command 鍐欐 `--reply-project`銆?- `/鏌ョ湅` 淇蹇呴』鍐欒繘鐪熷疄 `[[commands]]`锛屽彧鍐?alias 鏃犳晥銆?- taskkill 杩囨护鍙兘杩囨护杩涚▼娓呯悊鍣煶锛屼笉鑳芥帺鐩栫湡瀹?Codex 閿欒銆?
+## 鍓╀綑宸ヤ綔
 
-- 如果 QQ OneBot/NapCat 本身断连，本计划只能让配置正确，不能替代 QQ 网关排障。
-- 如果 cc-connect 不提供 source project 给 command，短期只能通过不同 project 的 command 写死 `--reply-project`。
-- `/查看` 修复必须写进真实 `[[commands]]`，只写 alias 无效。
-- taskkill 过滤只能过滤进程清理噪音，不能掩盖真实 Codex 错误。
+1. **Step 2**锛歈Q Codex `--reply-project` 鍥炶皟闅旂锛堥槻姝?QQ 缁撴灉涓插埌寰俊锛?2. **Step 5**锛歋KILL.md銆乧onfig-management.md 鏂囨。鏇存柊
+3. **Step 6**锛氬井淇?+ QQ 鍙岀鏈€缁堥獙鏀?4. **Step 7**锛氬妯″瀷璺敱锛圖eepSeek/GLM锛夛紝寰?API key 鍒颁綅
 
-## 剩余工作
+宸插畬鎴愶細Step 1 鉁?Step 3 鉁?Step 4 鉁?Step 8 鉁?
 
-1. **Step 2**：QQ Codex `--reply-project` 回调隔离（防止 QQ 结果串到微信）
-2. **Step 5**：SKILL.md、config-management.md 文档更新
-3. **Step 6**：微信 + QQ 双端最终验收
-4. **Step 7**：多模型路由（DeepSeek/GLM），待 API key 到位
-
-已完成：Step 1 ✅ Step 3 ✅ Step 4 ✅ Step 8 ✅

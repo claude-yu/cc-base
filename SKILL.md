@@ -402,3 +402,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -ProjectDir "E:\
 - Go 1.21+（编译 cc-controller 需要）
 - PowerShell 5.1 (Windows)
 - 微信企业号 bot token / QQ NapCat
+
+## AstrBot / Feishu Integration
+
+This skill now includes a Feishu/Lark integration under `integrations/astrbot-cc-controller/`.
+Use it when the user wants cc-base status and review commands from Feishu through AstrBot.
+
+Boundary:
+
+- WeChat/QQ through cc-connect is the main control surface and may include approved execution commands.
+- Feishu/AstrBot is read-only plus review submission/results and memory helper commands.
+- Do not expose `/执行`, `/确认执行`, arbitrary shell, arbitrary PowerShell, or general file writes through Feishu.
+
+Important files:
+
+- `integrations/astrbot-cc-controller/CONTRACT.md` - command whitelist and JSON envelope schema
+- `integrations/astrbot-cc-controller/adapter.ps1` - safe local adapter
+- `integrations/astrbot-cc-controller/plugin/` - AstrBot plugin
+- `integrations/astrbot-cc-controller/smoke.ps1` - offline smoke tests
+- `docs/feishu-astrbot-setup.md` - install guide
+- `docs/wechat-feishu-usage.md` - permission model and daily usage
+
+Feishu commands currently include `/科研监控`, `/系统状态`, `/提交审查`, `/审查结果`, `/审查统计`, `/记录误判`, `/转审`, `/记忆状态`, `/记忆记录`, `/记忆归档`, `/确认归档`, `/recap`, and `/帮助`.

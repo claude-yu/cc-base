@@ -55,6 +55,32 @@ func allDetectors() []Detector {
 	}
 }
 
+var detectorAliases = map[string]string{
+	"maestro":    "schrodinger",
+	"glide":      "schrodinger",
+	"ligprep":    "schrodinger",
+	"desmond":    "schrodinger",
+	"pyrosetta":  "rosetta",
+	"colabfold":  "alphafold",
+	"amber":      "amber_openmm",
+	"openmm":     "amber_openmm",
+	"vina":       "autodock_vina",
+	"haddock":    "haddock3",
+}
+
+func resolveDetectorAlias(name string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if canonical, ok := detectorAliases[lower]; ok {
+		return canonical
+	}
+	for _, d := range allDetectors() {
+		if strings.EqualFold(d.Name(), lower) {
+			return d.Name()
+		}
+	}
+	return ""
+}
+
 // --- Shared Helpers ---
 
 var scanExcludeDirs = map[string]bool{
@@ -703,6 +729,15 @@ func (d *rDetector) Match(dir string) (bool, int) {
 	}
 	if n, _ := globExists(dir, "*.R"); n > 0 && score < 20 {
 		score += 10
+	}
+	// results/ dir with output files is a strong R project signal
+	if fi, err := os.Stat(filepath.Join(dir, "results")); err == nil && fi.IsDir() {
+		if n, _ := globExists(dir, "results/*.rds", "results/*.csv", "results/*.RData"); n > 0 {
+			score += 10
+		}
+	}
+	if n, _ := globExists(dir, "*.rds", "*.RData"); n > 0 && score < 20 {
+		score += 5
 	}
 
 	if score < 20 {

@@ -22,3 +22,11 @@ test/
 # Runtime artifacts
 controller/latest-monitor-run.txt
 controller/active_project.json
+
+# Python / AstrBot local artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Controller runtime state
+controller/waiting_queue.json

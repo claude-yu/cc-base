@@ -1,258 +1,345 @@
-<p align="center">
-  <h1 align="center">cc-base</h1>
-  <p align="center"><strong>移动端远程操控 Claude Code + Codex 的多 Agent 控制器 + 科研监控 + 代码审查</strong></p>
-  <p align="center">
-    🤖 微信 / QQ 远程操控 &nbsp;|&nbsp; 🔬 12 科研 Detector &nbsp;|&nbsp; 🔍 DeepSeek/GLM 审查 &nbsp;|&nbsp; 🧠 记忆维护
-  </p>
-</p>
+﻿# cc-base
 
----
+cc-base is a Windows-first remote control kit for Claude Code, Codex, scientific job monitoring, code review, and memory maintenance. It is designed for researchers who want to control a local workstation from WeChat and inspect research jobs from Feishu/Lark through AstrBot.
 
-## 功能概览
+Current public boundary:
 
-| 功能 | 命令 | 说明 |
-|------|------|------|
-| **Session 对话** | `/cc <消息>` | 连续对话，自动判断模式（建议/只读/执行），保持上下文 |
-| **多项目支持** | `/项目` `/切项目` | 切换科研项目，每个项目独立 session 隔离 |
-| **计划审查** | `/计划审查 <任务>` | CC 写计划 + Codex 审查，异步执行自动回传 |
-| **异步问答** | `/问codex <问题>` | 异步询问 Codex，完成后自动推回聊天 |
-| **自动修复** | `/修复 <问题>` | CC 自动修复 controller/cc-connect 基础设施报错 |
-| **系统状态** | `/状态` | 系统状态仪表盘（项目、活动任务、卡住检测） |
-| **任务监控** | `/监控` | Stuck/zombie task 检测 + 自动清理 + callback 通知 |
-| **科研监控** | `/科研监控` | 扫描科研项目目录，检测 GROMACS/Python/R/Docker 任务状态（只读） |
-| **安装自检** | `/自检` | 12 项安装检查（CLI/config/命令/环境变量） |
-| **状态监控** | `/md状态检查 [目录]` | 只读扫描 GROMACS MD 工作目录和 log tail |
-| **任务执行** | `/执行 <RunId>` | 二次确认后执行任务（完整工具权限） |
-| **任务取消** | `/取消任务 [RunId]` | 取消运行中的任务 |
-| **计划质询** | `/质询计划` | Grill-Me 模式逐条质询审查结果 |
-| **自动回传** | `/自动回传 开/关` | 异步任务完成后自动推回聊天窗口 |
-| **代码审查** | `/审查 [preset]` | 独立 LLM 审查（security→DeepSeek, routing/general→GLM） |
-| **记忆健康** | `/记忆状态` | 记忆文件健康扫描（staleness/noise/索引一致性） |
-| **记忆整理** | `/记忆整理 <name>` | GLM 生成记忆 patch → `/记忆审查` → `/记忆应用` |
+- WeChat / QQ through cc-connect is the main control entrance. It can run conversations, review flows, approved execution, project switching, and scientific monitoring.
+- Feishu / Lark through AstrBot is the read-only and review entrance. It can inspect scientific job status, submit review jobs, view review results, and run memory recap/status helpers. It must not expose general shell execution.
+- cc-controller is the local Go core. It owns the command routing, scientific detectors, review commands, queue/status files, and JSON output contracts.
 
----
+## What You Get
 
-## 快速开始
+| Area | Entry | Purpose |
+| --- | --- | --- |
+| WeChat control | cc-connect commands | Remote Claude Code / Codex workflows from mobile chat |
+| Feishu read-only view | AstrBot plugin | Scientific monitor, review status, memory status from Feishu |
+| Scientific monitor | `cc-controller research-monitor` | Detect GROMACS, Schrodinger, HADDOCK3, Rosetta, Vina, AlphaFold, Amber/OpenMM, Gaussian, Python, R, Docker/CLI jobs |
+| Review workflow | `/审查`, `/提交审查`, `/审查结果` | DeepSeek/GLM/Codex-assisted independent reviews depending on channel |
+| Memory maintenance | `memory-health`, `memory-draft`, AstrBot memory commands | Health scan, patch/review/apply pipeline, recap/archive helpers |
+| Multi-project sessions | `/项目`, `/切项目` | Keep per-project working context and active work directory |
 
-```powershell
-# 1. 克隆
-git clone https://github.com/claude-yu/cc-base.git
-cd cc-base
-
-# 2. 一键安装
-powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -ProjectDir "E:\ai\myproject"
-
-# 3. 编译 Go 控制器
-cd E:\ai\myproject\controller
-go build -o cc-controller.exe .\cmd\cc-controller\
-
-# 4. 填写凭据后启动
-powershell -NoProfile -ExecutionPolicy Bypass -File "E:\ai\myproject\cc-connect\start.ps1"
-```
-
----
-
-## 系统架构
-
-```
-手机（微信 / QQ）
-    │
-    ▼
-cc-connect（Go 多平台聊天网关）
-    │
-    ├── Project: cc（Claude Code Agent）
-    │   └── 命令 → cc-controller.exe（Go 控制器）
-    │
-    ├── Project: codex（Codex Agent）
-    │   └── 命令 → cc-controller.exe（Go 控制器）
-    │
-    └── [[commands]] 路由
-        ├── Go 直调：/cc /问codex /项目 /切项目 /执行 /科研监控 /审查 /记忆*
-        ├── PS pipeline：/计划审查 /查看审查 /质询计划
-        └── PS 单步：/修复controller /md状态检查 /学习状态
-```
-
-### Architecture: Platform / Role / Backend
-
-cc-base 采用三层抽象模型，将消息来源、Agent 角色和实际执行引擎解耦：
-
-- **Platform（平台）**：消息从哪里来。WeChat、QQ、Feishu（未来）。不同平台共享同一套命令语义。
-- **Role（角色）**：用户想调用哪类 Agent。CC = 主执行者（对话/文件/任务），Codex = 第二意见/审查者。
-- **Backend（后端）**：角色的实际实现。native CLI（Claude Code、Codex CLI）或第三方 API（OpenAI/DeepSeek/GLM）。
-
-用户命令不暴露 backend 选择。`发给codex` 始终表示"让 Codex 角色处理"，无论后端是 native Codex CLI 还是 DeepSeek API。Backend 通过环境变量选择（如 `CC_CODEX_BACKEND=deepseek`），默认使用 native CLI。
-
-```
-Platform (WeChat/QQ)  -->  Role (CC/Codex)  -->  Backend (native/API)
-```
-
-本机用户保持 native Claude + native Codex 最快路径。没有 Codex CLI 的用户可通过 API backend 替代 Codex 角色。详见 `docs/env-vars.md`。
-
-### 三种异步管道
-
-| 模式 | 入口 | 后台执行 | 回传 |
-|------|------|----------|------|
-| Session-aware CC | `/cc <msg>` → `exec-cc` | `run-cc --session <id>` | 自动 |
-| Codex 问答 | `/问codex <q>` → `ask-codex` | `run-codex <RunId>` | 自动 |
-| 计划审查 | `/计划审查 <task>` → `submit-plan-review.ps1` | `plan-review-runner.ps1` | 可选 |
-
-### Go 控制器结构
-
-`cc-controller.exe`（55 文件 = 33 源码 + 22 测试, 455+ tests）：
-
-| 模块 | 文件 | 职责 |
-|------|------|------|
-| 核心 | `main.go` `common.go` `ask.go` `exec.go` `cc.go` `codex.go` | 入口、路由、session 对话、runner |
-| 任务管理 | `cancel.go` `project.go` `status.go` `queue.go` `monitor.go` | 取消、多项目、状态、队列、zombie 检测 |
-| 分类/上下文 | `classify.go` `context.go` `binding.go` | 模式分类、session 上下文、参数绑定 |
-| 后端 | `backend.go` | Backend 选择（native/DeepSeek/GLM/OpenAI）+ API client |
-| 审查 | `review.go` `review_local.go` `review_types.go` | 独立代码审查（3 presets, 双后端） |
-| 记忆维护 | `memory_health.go` `memory_draft.go` `memory_patch.go` | 健康扫描 + GLM→DeepSeek→Writer patch pipeline |
-| 科研监控 | `detector.go` + 8 专用 detector + `research_monitor.go` | 12 detector 扫描科研任务状态 |
-| 工具 | `run_status.go` `quiet_ui.go` | run 状态查询、UI 噪声过滤 |
-
----
-
-## 前置依赖
-
-| 依赖 | 版本 | 安装 |
-|------|------|------|
-| PowerShell 5.1+ | Windows 内置 | — |
-| Node.js | 18+ | [nodejs.org](https://nodejs.org) |
-| Go | 1.21+ | [go.dev](https://go.dev) |
-| cc-connect | 1.3.2+ | `npm install -g cc-connect` |
-| Claude Code CLI | latest | `npm install -g @anthropic-ai/claude-code` |
-| Codex CLI | optional | `npm install -g @openai/codex` |
-| Docker Desktop | QQ 接入时必需 | [docker.com](https://www.docker.com/) |
-| 微信企业号 bot | 必需 | 企业号后台申请 |
-| NapCat QQ | optional | Docker: `mlikiowa/napneko-docker`，[文档](https://napcat.napneko.icu/) |
-
----
-
-## 命令速查
-
-| 命令 | 别名 | 效果 | 实现 |
-|------|------|------|------|
-| `/cc <消息>` | 问cc、opus | Session-aware CC 连续对话 | Go |
-| `/计划审查 <任务>` | 审查计划、让cc写计划 | CC 写计划 + Codex 审查 | PS |
-| `/查看审查 [RunId]` | 审查结果 | 查看计划审查结果 | PS |
-| `/问codex <问题>` | 发给codex、gpt | 异步 Codex 问答 | Go |
-| `/codex结果 [RunId]` | 查看codex | 查看执行结果 | Go |
-| `/cc结果 [RunId]` | 查看cc | 查看 CC 对话结果 | Go |
-| `/修复 <问题>` | 修复bug、fix | CC 修复基础设施 | PS |
-| `/md状态检查 [目录]` | md进度、查md | 只读扫描 MD 目录 | PS |
-| `/项目` | 项目信息、当前项目 | 查看当前项目 | Go |
-| `/状态` | — | 查看系统状态（项目、活动任务、最近记录） | Go |
-| `/切项目 <名称|路径>` | 切换项目、切换到 | 切换科研项目 | Go |
-| `/执行 <RunId>` | — | 执行确认的任务 | Go |
-| `/取消任务 [RunId]` | 取消、中止、停止 | 取消运行中任务 | Go |
-| `/批准执行 <RunId>` | 执行批准任务 | 执行被批准的 run | PS |
-| `/质询计划` | grill、grillme | 逐条质询审查结果 | PS |
-| `/学习状态` | — | 查看学习统计 | PS |
-| `/进化习惯` | 进化 | 生成习惯进化候选 | PS |
-| `/自动回传 开/关` | 回传 | 开关自动回传 | PS |
-| `/监控` | monitor、检查任务 | 检测 stuck/zombie 任务 | Go |
-| `/科研监控` | 任务监控、运行监控、research | 扫描 12 类科研任务状态 | Go |
-| `/审查 [preset]` | 审查代码、review | 独立 LLM 代码审查（security/routing/general） | Go |
-| `/记忆状态` | 记忆、memory | 记忆健康扫描 | Go |
-| `/记忆整理 <name>` | mem整理 | GLM 生成记忆 patch | Go |
-| `/记忆审查 <runID>` | mem审查 | DeepSeek 审查 patch | Go |
-| `/记忆应用 <runID>` | mem应用 | 应用已批准 patch（5 安全门） | Go |
-| `/自检` | 检查安装 | 12 项安装自检 | PS |
-
----
-
-## 特性详解
-
-### Session-aware CC 对话 (`/cc`)
-
-```
-➡️ /cc 帮我看看最新状态
-⬅️ 正在读取状态...（30秒心跳推送进度）
-⬅️ [CC] 当前项目 work-9，最近运行结果：...
-```
-
-- **连续对话**：同一 session 记住前文，无需重复交代背景
-- **自动分类**：根据内容选择 advice / readonly / execute_request 模式
-  - `"修改文件"` → execute_request（二次确认）
-  - `"读取状态"` → readonly
-  - `"怎么看结果"` → advice（科研问句受保护，不误判为执行）
-- **30秒心跳**：长任务不超时等待，每 30 秒推送进度
-- **自动回传**：完成后推结果到聊天窗口
-
-### 多项目支持 (`/项目` `/切项目`)
+## Repository Layout
 
 ```text
-/项目     → 当前项目: work-9, Session: work-9-default
-/切项目 work-15 → 已切换项目, Session: work-15-default
+cc-base/
+  SKILL.md                         # skill entrypoint for Claude/Codex agents
+  README.md                        # this guide
+  install.ps1                      # installer for a local cc-base deployment
+  scripts/
+    config.toml.template           # safe cc-connect config template, no secrets
+    start.ps1                      # cc-connect starter
+    bin/*.ps1                      # pipeline wrappers and helpers
+  controller/
+    go.mod
+    cmd/cc-controller/*.go          # Go controller source and tests
+  integrations/
+    astrbot-cc-controller/
+      CONTRACT.md                  # AstrBot adapter contract and JSON schemas
+      adapter.ps1                  # Feishu-safe PowerShell adapter
+      smoke.ps1                    # offline smoke tests
+      plugin/                      # AstrBot plugin package
+      personas/                    # optional Feishu persona prompts
+      skills/                      # optional helper skills for detector/memory work
+  docs/
+    wechat-setup.md
+    feishu-astrbot-setup.md
+    wechat-feishu-usage.md
+    env-vars.md
+    research-job-monitor-plan.md
 ```
 
-- 每个项目独立 session 上下文，互不干扰
-- 自动解析同层目录，也支持完整路径
-- 项目信息持久化到 `active_project.json`
+## Prerequisites
 
-### 计划审查 (`/计划审查`)
+| Tool | Required For | Notes |
+| --- | --- | --- |
+| Windows + PowerShell 5.1+ | all flows | The scripts are Windows-first. PowerShell 7 is optional. |
+| Go 1.21+ | cc-controller build | `go build` and `go test` are used locally. |
+| Node.js 18+ | cc-connect and Claude/Codex CLIs | Install from nodejs.org or your package manager. |
+| Claude Code CLI | WeChat `/cc`, planning, execution | Install and login before use. |
+| Codex CLI | optional review / second opinion | Required only for native Codex workflows. |
+| cc-connect | WeChat / QQ gateway | The config template is in `scripts/config.toml.template`. |
+| AstrBot | Feishu / Lark gateway | Used with the plugin under `integrations/astrbot-cc-controller/plugin`. |
+| Feishu / Lark bot | Feishu channel | Configure inside AstrBot. |
+| Enterprise WeChat bot or supported cc-connect WeChat channel | WeChat channel | Put real tokens only in local config, never commit them. |
 
+## Install cc-base
+
+Clone the repository and install into your working directory:
+
+```powershell
+git clone https://github.com/claude-yu/cc-base.git
+cd cc-base
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -ProjectDir "C:\cc-base"
 ```
-➡️ /计划审查 帮我设计蛋白结合位点分析方案
-⬅️ Run ID: 20260519-123456-plan-review-xxxx
-...（后台异步执行）...
-⬅️ [审查完成] Codex verdict: APPROVE
-    建议执行: /批准执行 20260519-123456-plan-review-xxxx
+
+Build the Go controller:
+
+```powershell
+cd C:\cc-base\controller
+go test .\cmd\cc-controller\...
+go build -o cc-controller.exe .\cmd\cc-controller\
 ```
 
-- CC 只读模式生成计划 → Codex 独立审查
-- 自动注入领域规则
-- 审查结果包含 verdict（APPROVE / REVISE / BLOCK）
+The installer copies scripts and templates into your project. The sensitive runtime config is local-only:
 
-### Grill-Me 质询 (`/质询计划`)
+```text
+C:\cc-base\cc-connect\config.toml
+```
 
-当审查结果不理想时，逐个维度深度质询：
+Do not commit `config.toml`, tokens, account IDs, API keys, run logs, or generated `active_project.json`.
 
-- 成功标准是否明确
-- 输入验证是否充分
-- 回滚方案是否完备
-- 是否有遗漏的风险
+## WeChat Setup
 
-### Chat-Instinct 学习 (`/学习状态` `/进化习惯`)
+WeChat uses cc-connect as the chat gateway. The gateway maps chat commands to `cc-controller.exe` and the PowerShell wrappers.
 
-- 自动记录命令使用模式
-- 分析重复修复模式，生成进化候选
-- 用户确认后才写入 instinct，避免噪音污染
+1. Copy the safe template:
 
----
+```powershell
+Copy-Item .\scripts\config.toml.template C:\cc-base\cc-connect\config.toml
+```
 
-## 常见问题解决方案
+2. Edit only the local config:
 
-| 问题 | 原因 | 解决办法 |
-|------|------|---------|
-| 中文乱码 | GBK/UTF-8 编码链 | 脚本顶部设 UTF-8 三行（详见 `rules/encoding.md`），**不要用 936** |
-| 命令卡住无回复 | 后台进程挂起 | 使用 `/取消任务` 终止，或用 `/修复` 诊断 |
-| `/修复` 无法修复 | 复杂底层问题 | 检查 cc-connect config 和 logs |
-| Codex 长时间无回传 | Codex CLI 断连 | 检查 `CODEX_PROXY` 代理设置 |
-| 分类器误判 | 关键词匹配边界 | 用 `/cc` 会二次确认执行型任务，误判不自动执行 |
-| QQ ws connect failed | NapCat 未就绪 | NapCat 启动需 1-3 分钟，等待后重启 cc-connect。详见 [QQ 接入](docs/qq-setup.md) |
-| QQ Offline | QQ 未登录 | 打开 `http://127.0.0.1:6099` 扫码登录，详见 [QQ 接入](docs/qq-setup.md) |
+```text
+C:\cc-base\cc-connect\config.toml
+```
 
----
+Set at least:
 
-## 相关文档
+```toml
+[settings]
+controller_dir = "C:\\cc-base\\controller"
+work_dir = "C:\\cc-base"
 
-| 文档 | 内容 |
-|------|------|
-| [SKILL.md](SKILL.md) | 完整 Skill 参考（文件结构、部署步骤、环境变量） |
-| [指导.md](指导.md) | 聊天窗口使用指南 |
-| [rules/](rules/) | 编码规则（编码/代理/进程/安全/PowerShell） |
-| [docs/](docs/) | 深度文档（Config管理/学习系统/WeChat接入/QQ接入/Codex策略） |
+# Fill your real gateway tokens/accounts locally.
+# Never commit this file.
+```
 
----
+3. Start cc-connect:
 
-## 致谢
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\cc-base\scripts\start.ps1"
+```
 
-cc-base 基于 [cc-connect](https://github.com/chenhg5/cc-connect) 构建，感谢 [chenhg5](https://github.com/chenhg5) 提供的多平台聊天网关基础设施。
+4. In WeChat, test read-only commands first:
 
----
+```text
+/状态
+/项目
+/科研监控
+/审查 general
+/记忆状态
+```
 
-<p align="center">
-  <a href="https://github.com/claude-yu/cc-base">GitHub</a>
-</p>
+5. Use execution commands only after you understand the safety boundary:
+
+```text
+/cc 帮我看看当前项目状态
+/计划审查 帮我设计一个安全的分析流程
+/执行 <RunId>
+/取消任务 <RunId>
+```
+
+Important cc-connect rule: messages that begin with `/` bypass alias lookup. If you want `/某命令` to work, that command must exist as a real `[[commands]]` entry in `config.toml`. Aliases only work for non-slash first-word matching.
+
+## Feishu / AstrBot Setup
+
+Feishu uses AstrBot plus the bundled plugin. This channel is intentionally narrower than WeChat.
+
+### 1. Install AstrBot
+
+Install and configure AstrBot according to the AstrBot documentation. Enable the Lark/Feishu platform and make sure your bot can receive private chat messages before adding this plugin.
+
+### 2. Copy or link the plugin
+
+The plugin source is here:
+
+```text
+integrations\astrbot-cc-controller\plugin
+```
+
+Recommended local development setup on Windows:
+
+```powershell
+$repo = "C:\cc-base"
+$astr = "C:\Users\$env:USERNAME\.astrbot\data\plugins\astrbot_cc_controller"
+New-Item -ItemType Directory -Force -Path (Split-Path $astr) | Out-Null
+cmd /c mklink /J "$astr" "$repo\integrations\astrbot-cc-controller\plugin"
+```
+
+If junctions are inconvenient, copy the folder instead:
+
+```powershell
+Copy-Item -Recurse -Force "C:\cc-base\integrations\astrbot-cc-controller\plugin" "C:\Users\$env:USERNAME\.astrbot\data\plugins\astrbot_cc_controller"
+```
+
+Restart AstrBot after linking or copying.
+
+### 3. Point the adapter at your controller
+
+Edit `integrations\astrbot-cc-controller\adapter.ps1` if your installation path differs from the default. The adapter must know where `cc-controller.exe` and the local project root are.
+
+The expected model is:
+
+- adapter reads the active project from `controller\active_project.json`
+- adapter sets `CC_RESEARCH_MONITOR_ROOT` before calling `cc-controller.exe`
+- adapter rejects work dirs outside allowed roots
+- adapter returns exactly one JSON envelope on stdout
+
+Run the smoke test from the integration directory:
+
+```powershell
+cd C:\cc-base\integrations\astrbot-cc-controller
+powershell -NoProfile -ExecutionPolicy Bypass -File .\smoke.ps1
+```
+
+Expected result: all smoke tests pass. The current suite checks JSON output, detector filters, invalid command rejection, injection blocking, review result isolation, memory helpers, and archive safety.
+
+## Feishu Commands
+
+| Feishu Command | Alias | Capability | Safety |
+| --- | --- | --- | --- |
+| `/科研监控` | `/research` | Scan active research project | read-only |
+| `/科研监控 gromacs` | `/research gromacs` | Filter by detector | read-only |
+| `/系统状态` | `/status` | Show condensed controller status | read-only |
+| `/提交审查 <任务>` | `/submit-review <任务>` | Submit async review job | review-only, no shell execution from chat |
+| `/审查结果 [RunId]` | `/review-result [RunId]` | Show AstrBot-marked review result | read-only |
+| `/审查统计` | `/review-stats` | Aggregate AstrBot review runs | read-only |
+| `/记录误判` | `/detector-intake` | Show detector false-positive/false-negative intake template | local template only |
+| `/转审` | `/submit-detector-draft` | Show detector draft handoff template | local template only |
+| `/记忆状态` | `/memory-status` | Check memory file presence and freshness | read-only |
+| `/记忆记录` | `/memory-record` | Show memory update recommendations | read-only |
+| `/记忆归档` | `/memory-archive` | Preview archive candidates | read-only preview |
+| `/确认归档` | `/archive-execute` | Move stale completed memory entries | bounded write to progress files only |
+| `/recap` | `/memory-recap` | Show handoff + progress continuation context | read-only |
+| `/帮助` | `/help` | Command list | local plugin only |
+
+Feishu must not expose:
+
+```text
+/执行
+/确认执行
+/批准执行
+shell commands
+arbitrary PowerShell
+arbitrary file writes
+```
+
+## Detector Names and Aliases
+
+Canonical detector names:
+
+```text
+gromacs, schrodinger, haddock3, rosetta, autodock_vina,
+alphafold, amber_openmm, gaussian, python_pipeline,
+r_pipeline, generic_cli
+```
+
+Common aliases:
+
+| User Input | Canonical Detector |
+| --- | --- |
+| `maestro`, `glide`, `ligprep`, `desmond`, `薛定谔` | `schrodinger` |
+| `pyrosetta` | `rosetta` |
+| `colabfold` | `alphafold` |
+| `amber`, `openmm` | `amber_openmm` |
+| `vina` | `autodock_vina` |
+| `haddock` | `haddock3` |
+
+Ambiguous words such as `对接`, `docking`, and `dock` are not silently mapped. The Feishu plugin asks the user to choose a specific detector.
+
+## Channel Boundary
+
+| Channel | Role | Permissions | Recommended Use |
+| --- | --- | --- | --- |
+| WeChat / QQ via cc-connect | Main control entrance | Full configured command set, including approved execution | Private operator control |
+| Feishu / Lark via AstrBot | Team visibility and review entrance | Read-only + review submission/result + bounded memory archive | Project status sharing and safer mobile checks |
+| CLI | Local admin | Full local access | Build, test, deploy, emergency repair |
+
+This split is deliberate. Keep Feishu useful for status and review, but keep destructive execution out of group chats.
+
+## Review and Memory Environment Variables
+
+Only set keys you actually use:
+
+```powershell
+setx CC_DEEPSEEK_API_KEY "..."
+setx CC_GLM_API_KEY "..."
+setx CC_CODEX_BACKEND "native_codex"
+setx CC_RESEARCH_MONITOR_ROOT "C:\cc-base"
+```
+
+Do not put API keys into Git-tracked config files. The adapter allows only the narrow environment needed by the command it calls.
+
+## Common Operations
+
+Build and test controller:
+
+```powershell
+cd C:\cc-base\controller
+go test .\cmd\cc-controller\...
+go build -o cc-controller.exe .\cmd\cc-controller\
+```
+
+Run monitor locally:
+
+```powershell
+.\cc-controller.exe research-monitor --work-dir "D:\research-work\work_12\虚拟敲除" --format json
+.\cc-controller.exe research-monitor --detector r_pipeline --format json
+```
+
+Run AstrBot adapter directly:
+
+```powershell
+cd C:\cc-base\integrations\astrbot-cc-controller
+powershell -NoProfile -ExecutionPolicy Bypass -File .\adapter.ps1 -Command research-monitor
+powershell -NoProfile -ExecutionPolicy Bypass -File .\adapter.ps1 -Command research-monitor -Detector gromacs
+powershell -NoProfile -ExecutionPolicy Bypass -File .\adapter.ps1 -Command system-status
+```
+
+## Troubleshooting
+
+| Problem | Likely Cause | Fix |
+| --- | --- | --- |
+| WeChat command does nothing | command missing in `[[commands]]` | Register slash commands explicitly in `config.toml`. |
+| Feishu returns invalid JSON | adapter mixed stdout text with JSON | Ensure adapter writes only one JSON envelope to stdout. Use stderr for diagnostics. |
+| Feishu detects wrong project | stale `active_project.json` or wrong allowed root | Switch project from WeChat/CLI, then rerun `/科研监控`. |
+| Detector alias not recognized | alias missing from Go or Python layer | Add it to both `resolveDetectorAlias()` and `_DETECTOR_ALIASES`. |
+| Chinese text is garbled | PowerShell encoding mismatch | Use UTF-8 scripts and pipe Chinese text via stdin where needed. See `rules/encoding.md`. |
+| API review fails | missing API key in runtime env | Set `CC_DEEPSEEK_API_KEY` or `CC_GLM_API_KEY` in the process/user environment. |
+| Feishu group risk | group chat exposes commands broadly | Keep execution commands disabled. Add explicit group-chat gates before expanding. |
+
+## Security Checklist Before Sharing
+
+Before pushing or sending this repo to a friend:
+
+```powershell
+git status --short
+git grep -n "token\|secret\|password\|api_key\|apikey\|authorization\|Bearer"
+```
+
+Confirm these are not tracked:
+
+```text
+config.toml
+*.bak
+*.exe
+controller/runs/
+controller/active_project.json
+controller/latest-monitor-run.txt
+controller/waiting_queue.json
+__pycache__/
+*.pyc
+```
+
+## Further Docs
+
+- `docs/wechat-setup.md` - WeChat/cc-connect setup notes
+- `docs/feishu-astrbot-setup.md` - Feishu/AstrBot setup guide
+- `docs/wechat-feishu-usage.md` - how the two channels should be used together
+- `integrations/astrbot-cc-controller/CONTRACT.md` - adapter contract and schemas
+- `docs/research-job-monitor-plan.md` - detector design notes
+- `docs/env-vars.md` - environment variable reference
+
+

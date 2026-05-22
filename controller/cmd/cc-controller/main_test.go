@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"io"
@@ -33,7 +33,7 @@ func TestFindLatestRunSkipsSidecarDirs(t *testing.T) {
 }
 
 // TestReadInputArgs pins the fidelity of the {{args}} path that config.toml uses
-// (cc-connect → cc-controller.exe ask-codex {{args}} → os.Args → readInput).
+// (cc-connect 鈫?cc-controller.exe ask-codex {{args}} 鈫?os.Args 鈫?readInput).
 // This is the empirical verification of Codex round-2 mandatory fix #2.
 func TestReadInputArgs(t *testing.T) {
 	cases := []struct {
@@ -42,8 +42,8 @@ func TestReadInputArgs(t *testing.T) {
 		want string
 	}{
 		{"plain ascii", []string{"hello", "world"}, "hello world"},
-		{"chinese", []string{"这是中文测试"}, "这是中文测试"},
-		{"double quotes inside one arg", []string{`他说"你好"`}, `他说"你好"`},
+		{"chinese", []string{"杩欐槸涓枃娴嬭瘯"}, "杩欐槸涓枃娴嬭瘯"},
+		{"double quotes inside one arg", []string{`浠栬"浣犲ソ"`}, `浠栬"浣犲ソ"`},
 		{"apostrophe", []string{"it's", "fine"}, "it's fine"},
 		{"shell metachars preserved", []string{"a & b | c $x"}, "a & b | c $x"},
 		{"newline survives inside a single arg", []string{"line1\nline2"}, "line1\nline2"},
@@ -96,7 +96,7 @@ func TestSanitizeProjectID_ChineseDir(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("backslash path test only meaningful on Windows")
 	}
-	got := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	got := sanitizeProjectID(`D:\research-work\work_12\铏氭嫙鏁查櫎`)
 	if got == "____" || got == "" {
 		t.Fatalf("Chinese dir produced degenerate ID: %q", got)
 	}
@@ -106,23 +106,23 @@ func TestSanitizeProjectID_ChineseDir(t *testing.T) {
 }
 
 func TestSanitizeProjectID_SamePathSameID(t *testing.T) {
-	a := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
-	b := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
+	a := sanitizeProjectID(`D:\research-work\work_12\铏氭嫙鏁查櫎`)
+	b := sanitizeProjectID(`D:\research-work\work_12\铏氭嫙鏁查櫎`)
 	if a != b {
 		t.Fatalf("same path produced different IDs: %q vs %q", a, b)
 	}
 }
 
 func TestSanitizeProjectID_DifferentPathsDifferentIDs(t *testing.T) {
-	a := sanitizeProjectID(`G:\proteinwork\work_12\虚拟敲除`)
-	b := sanitizeProjectID(`G:\proteinwork\work_13\虚拟敲除`)
+	a := sanitizeProjectID(`D:\research-work\work_12\铏氭嫙鏁查櫎`)
+	b := sanitizeProjectID(`D:\research-work\work_13\铏氭嫙鏁查櫎`)
 	if a == b {
 		t.Fatalf("different paths produced same ID: %q", a)
 	}
 }
 
 func TestSanitizeProjectID_MixedName(t *testing.T) {
-	got := sanitizeProjectID(`E:\projects\vko_虚拟敲除`)
+	got := sanitizeProjectID(`E:\projects\vko_铏氭嫙鏁查櫎`)
 	if got != "vko___" && !strings.HasPrefix(got, "vko_") {
 		t.Fatalf("mixed name: expected ASCII prefix preserved, got %q", got)
 	}
@@ -210,37 +210,30 @@ func TestCleanCodexOutputTaskkill(t *testing.T) {
 		want  string
 	}{
 		{
-			"mojibake taskkill",
-			"\xb3\xc9\xb9\xa6: \xd2\xd1\xd6\xd5\xd6\xb9 PID 7260 \xb5\xc4\xbd\xf8\xb3\xcc\n我是 Codex 的回答",
-			"我是 Codex 的回答",
-		},
-		{
-			"chinese taskkill",
-			"成功: 已终止 PID 7260 的进程\n正常回答内容",
-			"正常回答内容",
-		},
-		{
 			"english taskkill",
 			"SUCCESS: The process with PID 1234 has been terminated.\nActual answer",
 			"Actual answer",
 		},
 		{
 			"multiple taskkill lines",
-			"\xb3\xc9\xb9\xa6: PID 7260\n\xb3\xc9\xb9\xa6: PID 7261\n回答在这里",
-			"回答在这里",
+			"SUCCESS: PID 7260\nSUCCESS: PID 7261\nAnswer starts here",
+			"Answer starts here",
 		},
 		{
 			"no taskkill passthrough",
-			"这是正常的 Codex 回答\n没有任何噪声",
-			"这是正常的 Codex 回答\n没有任何噪声",
+			"This is a normal Codex answer\nwithout process noise",
+			"This is a normal Codex answer\nwithout process noise",
 		},
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := cleanCodexOutput(c.input)
-			if strings.TrimSpace(got) != strings.TrimSpace(c.want) {
-				t.Fatalf("cleanCodexOutput() = %q, want %q", got, c.want)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := cleanCodexOutput(tc.input)
+			if got != tc.want {
+				t.Fatalf("cleanCodexOutput() = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
+
+
+

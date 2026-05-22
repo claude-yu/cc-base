@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -40,13 +41,57 @@ func resolveControllerRoot() string {
 }
 
 // resolveProjectWorkDir returns the per-research-project working directory.
-// Switch projects by changing CC_WORK_DIR only — controller dir and sandbox
-// stay fixed.
+// Priority: CC_WORK_DIR env > active_project.json > "."
 func resolveProjectWorkDir() string {
 	if dir := os.Getenv("CC_WORK_DIR"); dir != "" {
 		return dir
 	}
+	if dir := readActiveProjectWorkDir(); dir != "" {
+		return dir
+	}
 	return "."
+}
+
+func readActiveProjectWorkDir() string {
+	root := resolveControllerRootSilent()
+	if root == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(root, "active_project.json"))
+	if err != nil {
+		return ""
+	}
+	var proj struct {
+		WorkDir string `json:"work_dir"`
+	}
+	if json.Unmarshal(data, &proj) != nil || proj.WorkDir == "" {
+		return ""
+	}
+	if fi, err := os.Stat(proj.WorkDir); err == nil && fi.IsDir() {
+		return proj.WorkDir
+	}
+	return ""
+}
+
+// resolveControllerRootSilent is like resolveControllerRoot but returns ""
+// instead of calling os.Exit on failure.
+func resolveControllerRootSilent() string {
+	if dir := os.Getenv("CC_CONTROLLER_DIR"); dir != "" {
+		return dir
+	}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		if filepath.Base(dir) == "bin" {
+			return filepath.Dir(dir)
+		}
+		if fi, err := os.Stat(filepath.Join(dir, "runs")); err == nil && fi.IsDir() {
+			return dir
+		}
+	}
+	if root := os.Getenv("CONTROLLER_ROOT"); root != "" {
+		return root
+	}
+	return ""
 }
 
 func writeFile(path, content string) {
